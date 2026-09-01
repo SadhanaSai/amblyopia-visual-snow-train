@@ -13,7 +13,11 @@ const ZONES = [
   { start: 170, end: 200, label: 'Turquoise-blue', note: 'May reduce symptoms', tone: 'good' as const },
 ];
 
-export default function ChromaticSimulator() {
+interface ChromaticSimulatorProps {
+  onComplete?: () => void;
+}
+
+export default function ChromaticSimulator({ onComplete }: ChromaticSimulatorProps) {
   const [hue, setHue] = useState(45);
   const [saturation, setSaturation] = useState(50);
   const [opacity, setOpacity] = useState(30);
@@ -96,6 +100,16 @@ export default function ChromaticSimulator() {
         <p className="mt-1">This tool is for education and exploration only.</p>
         <p className="mt-1">No prescription or recommendation is generated here.</p>
       </div>
+
+      {onComplete && (
+        <button
+          type="button"
+          onClick={onComplete}
+          className="rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
+        >
+          Done
+        </button>
+      )}
     </div>
   );
 }
