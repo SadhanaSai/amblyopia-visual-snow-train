@@ -74,13 +74,13 @@ export default function CalibrationWizard({ onComplete }: CalibrationWizardProps
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col gap-6 p-6">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+    <div className="flex min-h-screen flex-col gap-6 p-6">
+      <div className="mx-auto w-full max-w-md text-xs font-medium uppercase tracking-wide text-gray-400">
         Screen calibration — step {step} of 4
       </div>
 
       {step === 1 && (
-        <section className="flex flex-col gap-4">
+        <section className="mx-auto flex w-full max-w-md flex-col gap-4">
           <h2 className="text-lg font-semibold">Select a reference object</h2>
           <p className="text-sm text-gray-600">
             Pick something you have on hand with a known, fixed physical width.
@@ -136,38 +136,51 @@ export default function CalibrationWizard({ onComplete }: CalibrationWizardProps
       )}
 
       {step === 2 && referenceWidthMm !== null && (
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">Match the on-screen rectangle</h2>
-          <p className="text-sm text-gray-600">
-            Place your {referenceNoun} flat against the screen, long edge horizontal. Adjust the
-            slider until the rectangle below matches its size exactly.
-          </p>
-          <div
-            className="rounded border-2 border-dashed border-blue-500 bg-blue-50"
-            style={{ width: `${sliderPx}px`, height: '90px', maxWidth: '100%' }}
-          />
-          <input
-            type="range"
-            min={SLIDER_MIN}
-            max={SLIDER_MAX}
-            step={1}
-            value={sliderPx}
-            onChange={(e) => setSliderPx(Number(e.target.value))}
-            className="w-full"
-          />
-          <div className="text-xs text-gray-500">{sliderPx}px wide</div>
-          <button
-            type="button"
-            onClick={() => setStep(3)}
-            className="mt-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
-          >
-            Continue
-          </button>
+        <section className="flex w-full flex-col items-center gap-4">
+          <div className="mx-auto w-full max-w-md">
+            <h2 className="text-lg font-semibold">Match the on-screen rectangle</h2>
+            <p className="text-sm text-gray-600">
+              Place your {referenceNoun} flat against the screen, long edge horizontal. Adjust the
+              slider until the rectangle below matches its size exactly.
+            </p>
+          </div>
+          {/* Deliberately unconstrained by the max-w-md text column above — the
+              slider goes up to 2000px and the rectangle needs to actually reach
+              that width on screen to be matchable against a physical object.
+              overflow-x-auto lets it scroll rather than silently clip on narrow
+              viewports instead of capping it with maxWidth. */}
+          <div className="w-full overflow-x-auto">
+            <div className="flex justify-center">
+              <div
+                className="shrink-0 rounded border-2 border-dashed border-blue-500 bg-blue-50"
+                style={{ width: `${sliderPx}px`, height: '90px' }}
+              />
+            </div>
+          </div>
+          <div className="mx-auto w-full max-w-md">
+            <input
+              type="range"
+              min={SLIDER_MIN}
+              max={SLIDER_MAX}
+              step={1}
+              value={sliderPx}
+              onChange={(e) => setSliderPx(Number(e.target.value))}
+              className="w-full"
+            />
+            <div className="text-xs text-gray-500">{sliderPx}px wide</div>
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              className="mt-2 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
+            >
+              Continue
+            </button>
+          </div>
         </section>
       )}
 
       {step === 3 && (
-        <section className="flex flex-col gap-4">
+        <section className="mx-auto flex w-full max-w-md flex-col gap-4">
           <h2 className="text-lg font-semibold">Confirm</h2>
           <p className="text-sm text-gray-700">
             Your screen is approximately <strong>{ppi.toFixed(0)} PPI</strong>.
@@ -201,32 +214,40 @@ export default function CalibrationWizard({ onComplete }: CalibrationWizardProps
       )}
 
       {step === 4 && (
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">Viewing distance</h2>
-          <p className="text-sm text-gray-600">Sit so your eyes are 40cm from the screen.</p>
-          <div
-            className="flex items-center justify-center rounded border border-gray-300 bg-gray-50 text-xs text-gray-500"
-            style={{ width: `${400 * ppmm}px`, maxWidth: '100%', height: '32px' }}
-          >
-            40cm guide — print at 100% scale to check
+        <section className="flex w-full flex-col items-center gap-4">
+          <div className="mx-auto w-full max-w-md">
+            <h2 className="text-lg font-semibold">Viewing distance</h2>
+            <p className="text-sm text-gray-600">Sit so your eyes are 40cm from the screen.</p>
           </div>
-          <label className="flex items-start gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={distanceConfirmed}
-              onChange={(e) => setDistanceConfirmed(e.target.checked)}
-              className="mt-1"
-            />
-            I'm sitting approximately 40cm from the screen.
-          </label>
-          <button
-            type="button"
-            disabled={!distanceConfirmed}
-            onClick={handleConfirm}
-            className="mt-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-40"
-          >
-            Finish calibration
-          </button>
+          <div className="w-full overflow-x-auto">
+            <div className="flex justify-center">
+              <div
+                className="flex shrink-0 items-center justify-center rounded border border-gray-300 bg-gray-50 text-xs text-gray-500"
+                style={{ width: `${400 * ppmm}px`, height: '32px' }}
+              >
+                40cm guide — print at 100% scale to check
+              </div>
+            </div>
+          </div>
+          <div className="mx-auto w-full max-w-md">
+            <label className="flex items-start gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={distanceConfirmed}
+                onChange={(e) => setDistanceConfirmed(e.target.checked)}
+                className="mt-1"
+              />
+              I'm sitting approximately 40cm from the screen.
+            </label>
+            <button
+              type="button"
+              disabled={!distanceConfirmed}
+              onClick={handleConfirm}
+              className="mt-2 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+            >
+              Finish calibration
+            </button>
+          </div>
         </section>
       )}
     </div>
