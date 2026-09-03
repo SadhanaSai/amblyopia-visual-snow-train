@@ -123,12 +123,16 @@ export default function CSFTest({ onComplete }: CSFTestProps) {
     [eye, eyeIndex, eyeOrder.length, completedResults, logCSF, onComplete],
   );
 
-  // Respond to arrow-key presses during the response window.
+  // Respond to arrow-key presses from stimulus onset through the response
+  // window — a 200ms flash is fast enough that a quick, attentive response
+  // often lands before the phase flips to 'response'; gating strictly on
+  // 'response' silently dropped those presses.
   useEffect(() => {
-    if (phase !== 'response' || !stimulus) return;
+    if ((phase !== 'stimulus' && phase !== 'response') || !stimulus) return;
     function onKeyDown(e: KeyboardEvent) {
       const choiceIdx = ORIENTATION_OPTIONS.findIndex((o) => o.key === e.key);
       if (choiceIdx === -1) return;
+      e.preventDefault();
       const correct = choiceIdx === orientationIdx;
       const nextPosterior = updateCSFPosterior(posterior, stimulus!, correct);
       setPosterior(nextPosterior);
