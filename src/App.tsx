@@ -27,6 +27,8 @@ import StereoTest from './assessment/StereoTest';
 import AssessmentRouter from './assessment/AssessmentRouter';
 
 import ProgressDashboard from './progress/ProgressDashboard';
+import ExerciseIntro from './components/ExerciseIntro';
+import { EXERCISE_INFO } from './data/exerciseInfo';
 
 const CLINICAL_DISCLAIMER = `These exercises and measurements are based on published peer-reviewed research in vision science and neuro-optometry (2020-2025). They are not a substitute for clinical diagnosis or treatment by a licensed optometrist or ophthalmologist.
 
@@ -129,18 +131,33 @@ function TrainTab() {
   const [module, setModule] = useState<'dichoptic' | 'nopt'>('dichoptic');
   const [displayMode, setDisplayMode] = useState<DisplayModeChoice>('anaglyph');
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [introSeen, setIntroSeen] = useState(false);
 
   const exercises = module === 'dichoptic' ? DICHOPTIC_EXERCISES : NOPT_EXERCISES;
   const active = exercises.find((e) => e.key === activeKey);
 
+  function openExercise(key: string) {
+    setActiveKey(key);
+    setIntroSeen(false);
+  }
+
+  function closeExercise() {
+    setActiveKey(null);
+    setIntroSeen(false);
+  }
+
   if (active) {
+    const info = EXERCISE_INFO[active.key];
+    if (!introSeen && info) {
+      return <ExerciseIntro info={info} onStart={() => setIntroSeen(true)} onBack={closeExercise} />;
+    }
     const ActiveComponent = active.Component;
     return (
       <div className="flex flex-col gap-4 p-4">
-        <button type="button" onClick={() => setActiveKey(null)} className="self-start text-xs text-blue-600">
+        <button type="button" onClick={closeExercise} className="self-start text-xs text-blue-600">
           &larr; Back
         </button>
-        <ActiveComponent onComplete={() => setActiveKey(null)} />
+        <ActiveComponent onComplete={closeExercise} />
       </div>
     );
   }
@@ -192,7 +209,7 @@ function TrainTab() {
           <button
             key={e.key}
             type="button"
-            onClick={() => setActiveKey(e.key)}
+            onClick={() => openExercise(e.key)}
             className="rounded-lg border border-gray-200 p-3 text-left text-sm font-medium text-gray-800"
           >
             {e.label}
@@ -210,20 +227,33 @@ function TrainTab() {
 function AssessTab() {
   const { vaResults, csfResults, stereoResults, suppressionResults } = useSessionLogger();
   const [activeTest, setActiveTest] = useState<'va' | 'csf' | 'stereo' | 'suppression' | null>(null);
+  const [introSeen, setIntroSeen] = useState(false);
   const remindersEnabled = localStorage.getItem('assessment_reminders_enabled') !== 'false';
 
+  function openTest(test: 'va' | 'csf' | 'stereo' | 'suppression') {
+    setActiveTest(test);
+    setIntroSeen(false);
+  }
+
+  function closeTest() {
+    setActiveTest(null);
+    setIntroSeen(false);
+  }
+
   if (activeTest) {
+    const info = EXERCISE_INFO[activeTest];
+    if (!introSeen && info) {
+      return <ExerciseIntro info={info} onStart={() => setIntroSeen(true)} onBack={closeTest} />;
+    }
     return (
       <div className="flex flex-col gap-4 p-4">
-        <button type="button" onClick={() => setActiveTest(null)} className="self-start text-xs text-blue-600">
+        <button type="button" onClick={closeTest} className="self-start text-xs text-blue-600">
           &larr; Back
         </button>
-        {activeTest === 'va' && <VATest onComplete={() => setActiveTest(null)} />}
-        {activeTest === 'csf' && <CSFTest onComplete={() => setActiveTest(null)} />}
-        {activeTest === 'stereo' && <StereoTest onComplete={() => setActiveTest(null)} />}
-        {activeTest === 'suppression' && (
-          <RivalryProbe mode="assessment" onComplete={() => setActiveTest(null)} />
-        )}
+        {activeTest === 'va' && <VATest onComplete={closeTest} />}
+        {activeTest === 'csf' && <CSFTest onComplete={closeTest} />}
+        {activeTest === 'stereo' && <StereoTest onComplete={closeTest} />}
+        {activeTest === 'suppression' && <RivalryProbe mode="assessment" onComplete={closeTest} />}
       </div>
     );
   }
@@ -241,25 +271,25 @@ function AssessTab() {
         label="Visual Acuity"
         lastDate={lastVA?.date}
         lastValue={lastVA ? `${lastVA.logMAR.toFixed(1)} logMAR` : undefined}
-        onRun={() => setActiveTest('va')}
+        onRun={() => openTest('va')}
       />
       <AssessCard
         label="Contrast Sensitivity"
         lastDate={lastCSF?.date}
         lastValue={lastCSF ? `AULCSF ${lastCSF.AULCSF.toFixed(2)}` : undefined}
-        onRun={() => setActiveTest('csf')}
+        onRun={() => openTest('csf')}
       />
       <AssessCard
         label="Stereoacuity"
         lastDate={lastStereo?.date}
         lastValue={lastStereo ? `${lastStereo.thresholdArcsec.toFixed(0)} arc-sec` : undefined}
-        onRun={() => setActiveTest('stereo')}
+        onRun={() => openTest('stereo')}
       />
       <AssessCard
         label="Suppression"
         lastDate={lastSuppression?.date}
         lastValue={lastSuppression ? `${lastSuppression.thresholdContrastPct.toFixed(1)}%` : undefined}
-        onRun={() => setActiveTest('suppression')}
+        onRun={() => openTest('suppression')}
       />
 
       <ClinicalDisclaimer variant="footer" />
