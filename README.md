@@ -38,3 +38,7 @@ Every exercise and assessment opens on a plain-language "what this does / how to
 ## Status
 
 Functionally complete against the app's own spec, with a couple of deliberately scoped-down pieces flagged in the commit history (a 12-passage starter reading corpus instead of 30, and anaglyph as the only implemented display mode for now). See `git log` for the phase-by-phase build history.
+
+## License
+
+[MIT](./LICENSE). See also [DISCLAIMER.md](./DISCLAIMER.md) — this is not a medical device or a substitute for professional care.
