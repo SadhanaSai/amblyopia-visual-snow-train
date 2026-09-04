@@ -147,7 +147,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
           <h2 className="text-lg font-semibold">How this works</h2>
           <p className="text-sm text-gray-600">
             Dichoptic training shows different content to each eye at the same time — typically
-            through red/cyan anaglyph glasses — so the brain is encouraged to combine input from
+            through red/cyan or red/green anaglyph glasses — so the brain is encouraged to combine input from
             both eyes instead of suppressing the weaker one.
           </p>
           <p className="text-sm text-gray-600">

@@ -187,16 +187,31 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
           </div>
         </div>
         <p className="text-sm text-gray-600">
-          With glasses on — can you see RED but not GREEN or CYAN with your weak eye, and GREEN
-          and CYAN but not RED with your other eye?
+          With glasses on — can you see RED but not GREEN or CYAN with your weak eye, and only one
+          of GREEN/CYAN (not RED) with your other eye?
         </p>
         <p className="text-xs text-gray-500">
-          This app is built for <strong>red/cyan</strong> glasses. If GREEN comes through clearly
-          but CYAN looks noticeably dimmer or grayer through the same (non-red) lens, your lens is
-          closer to pure green than cyan — a different anaglyph standard the app doesn't render
-          for, which will always look washed out and leaky here no matter how strong the colors
-          are, regardless of what's on screen.
+          Anaglyph glasses come in two standards: <strong>red/cyan</strong> and{' '}
+          <strong>red/green</strong>. Whichever one of GREEN or CYAN comes through clearly with
+          your non-weak eye tells you which lens you have — set it below so the app renders the
+          matching color instead of one that leaks through your actual lens.
         </p>
+        <div className="flex gap-2">
+          {(['red-cyan', 'red-green'] as const).map((lt) => (
+            <button
+              key={lt}
+              type="button"
+              onClick={() => updateProfile({ lensType: lt })}
+              className={`flex-1 rounded-lg border py-2 text-sm font-medium ${
+                lensType === lt
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-gray-300 text-gray-700'
+              }`}
+            >
+              {lt === 'red-cyan' ? 'Red / Cyan' : 'Red / Green'}
+            </button>
+          ))}
+        </div>
         <div className="flex gap-2">
           <button
             type="button"
@@ -219,15 +234,15 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
 
   if (phase === 'help') {
     const weakLens = 'red';
-    const strongLens = 'cyan';
+    const strongLens = lensType === 'red-green' ? 'green' : 'cyan';
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
         <h2 className="text-lg font-semibold">Glasses orientation</h2>
         <p className="text-sm text-gray-600">
           Your <strong>{profile.weakEye}</strong> eye is your weak eye and should look through the{' '}
           <strong>{weakLens}</strong> lens. Your other eye should look through the{' '}
-          <strong>{strongLens}</strong> lens. If you can see both RED and CYAN with the same eye,
-          try flipping the glasses around.
+          <strong>{strongLens}</strong> lens. If you can see both RED and {strongLens.toUpperCase()}{' '}
+          with the same eye, try flipping the glasses around.
         </p>
         <button
           type="button"

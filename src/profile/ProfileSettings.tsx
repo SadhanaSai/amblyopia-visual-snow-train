@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Diagnosis, WeakEye } from '../types/profile';
+import type { Diagnosis, LensType, WeakEye } from '../types/profile';
 import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import CalibrationWizard from '../calibration/CalibrationWizard';
 import { useProfile } from './ProfileContext';
@@ -40,6 +40,32 @@ export default function ProfileSettings() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-sm font-semibold text-gray-700">Lens type</h3>
+        <div className="flex gap-2">
+          {(['red-cyan', 'red-green'] as LensType[]).map((lt) => (
+            <button
+              key={lt}
+              type="button"
+              onClick={() => updateProfile({ lensType: lt })}
+              className={`flex-1 rounded-lg border py-2 text-sm ${
+                (profile.lensType ?? 'red-cyan') === lt
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 text-gray-700'
+              }`}
+            >
+              {lt === 'red-cyan' ? 'Red / Cyan' : 'Red / Green'}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Match this to your physical anaglyph glasses — every dichoptic exercise renders its
+          non-red channel in this color, so a mismatch makes it look washed out or leaky no
+          matter what's on screen. Not sure which you have? The Dichoptic Reading glasses-check
+          screen shows both colors side by side to help you tell.
+        </p>
       </section>
 
       <section>

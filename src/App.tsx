@@ -422,7 +422,7 @@ function GuideTab() {
         <h3 className="mb-1 text-sm font-semibold text-gray-800">How dichoptic training works</h3>
         <p className="text-sm text-gray-600">
           Dichoptic training presents different content to each eye at the same time, usually
-          through red/cyan anaglyph glasses. By giving the weak eye full-strength content and the
+          through red/cyan or red/green anaglyph glasses. By giving the weak eye full-strength content and the
           strong eye a reduced-contrast (ICR) version, the brain is pushed to combine input from
           both eyes instead of suppressing the weaker one — the core mechanism behind the
           contrast-rebalancing approach validated in Hess, Mansouri & Thompson (2010) and later

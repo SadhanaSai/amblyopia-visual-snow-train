@@ -17,7 +17,7 @@ export const EXERCISE_INFO: Record<string, ExerciseInfo> = {
     summary:
       "The core dichoptic exercise. Your weak eye sees a full-strength pattern, your strong eye sees a fainter one at the same time — over sessions the app narrows that gap, pushing your visual system to combine both eyes instead of tuning one out.",
     steps: [
-      'Put on your red/cyan glasses.',
+      'Put on your anaglyph glasses (red/cyan or red/green — set which under Settings → Lens type).',
       'Pick a spatial frequency and (optionally) a flicker rate, then Start.',
       'After each ~2-second pattern, press F if it looked like one combined (fused) pattern, or R if it looked like it was flickering or alternating (rivalry).',
       "You'll have about half a second to respond after each one — don't overthink it, go with your first impression.",
@@ -60,10 +60,10 @@ export const EXERCISE_INFO: Record<string, ExerciseInfo> = {
   'dichoptic-reading': {
     title: 'Dichoptic Reading',
     summary:
-      'Trains binocular integration through reading: words alternate between your weak eye (red) and strong eye (cyan), so neither eye alone can read the full sentence — your brain has to combine them.',
+      'Trains binocular integration through reading: words alternate between your weak eye (red) and strong eye (cyan or green, depending on your glasses), so neither eye alone can read the full sentence — your brain has to combine them.',
     steps: [
       'Put on your glasses.',
-      'On the check screen, confirm you can see RED but not CYAN with your weak eye (use the help screen if the colors seem swapped).',
+      'On the check screen, set your lens type if you haven’t already, then confirm you can see RED but not the other color with your weak eye (use the help screen if the colors seem swapped).',
       'Pick an alternation mode — start with Line if this is new to you.',
       'Read at your own pace, press Next when done, then answer 3 quick comprehension questions.',
       'Aim for 1-3 passages per session.',
@@ -158,7 +158,7 @@ export const EXERCISE_INFO: Record<string, ExerciseInfo> = {
   stereo: {
     title: 'Stereoacuity Test',
     summary:
-      'Measures your depth perception from combining both eyes, using a hidden-circle 3D illusion. Requires red/cyan glasses.',
+      'Measures your depth perception from combining both eyes, using a hidden-circle 3D illusion. Requires red/cyan or red/green anaglyph glasses.',
     steps: [
       'Put on your glasses.',
       'A circle is hidden somewhere in the dot pattern — only visible once your eyes fuse the image in 3D.',
