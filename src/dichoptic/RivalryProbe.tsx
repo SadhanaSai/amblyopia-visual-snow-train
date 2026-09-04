@@ -3,11 +3,11 @@ import { useProfile } from '../profile/ProfileContext';
 import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useStaircase } from '../hooks/useStaircase';
+import { useResponsiveSquareCanvas } from '../hooks/useResponsiveSquareCanvas';
 import { compositeAnaglyph, drawSinusoidalGrating } from '../utils/canvasUtils';
 import { strongChannel, weakChannel } from '../utils/colorUtils';
 import type { StaircaseConfig } from '../types/staircase';
 
-const CANVAS_SIZE = 320;
 const PROBE_MS = 200;
 const RESPONSE_WINDOW_MS = 500;
 const JITTER_MIN_MS = 3000;
@@ -38,6 +38,7 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
   const { logSession, logSuppression } = useSessionLogger();
   const staircase = useStaircase(CONFIG);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { containerRef, size } = useResponsiveSquareCanvas();
 
   const durationSec = mode === 'assessment' ? 300 : 480;
 
@@ -170,7 +171,7 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
       if (windowTimeout !== undefined) window.clearTimeout(windowTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, done, drawBackground]);
+  }, [running, done, drawBackground, size]);
 
   useEffect(() => {
     if (!running || done) return;
@@ -233,20 +234,31 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
       <div className="flex justify-between text-xs text-gray-400">
         <span>
           {Math.floor(elapsed / 60)}:{(elapsed % 60).toString().padStart(2, '0')} /{' '}
           {Math.floor(durationSec / 60)}:00
         </span>
-        <span>Probes: {probeCount}</span>
+        <span>
+          Probes: {probeCount}
+          {probeCount > 0 && ` · ${hits} hit${hits === 1 ? '' : 's'}`}
+        </span>
       </div>
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
-        className="mx-auto rounded border border-gray-200 bg-black"
-      />
+      <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full bg-blue-600 transition-all"
+          style={{ width: `${Math.min(100, (elapsed / durationSec) * 100)}%` }}
+        />
+      </div>
+      <div ref={containerRef} className="relative mx-auto aspect-square w-full">
+        <canvas
+          ref={canvasRef}
+          width={size}
+          height={size}
+          className="absolute inset-0 h-full w-full rounded border border-gray-200 bg-black"
+        />
+      </div>
       <p className="text-center text-xs text-gray-500">Press spacebar when you see the probe.</p>
     </div>
   );

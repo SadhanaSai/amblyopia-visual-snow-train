@@ -268,16 +268,16 @@ function FloaterDesensitization({
     const cx = 160 + 80 * Math.cos((angle * Math.PI) / 180);
     const cy = 160 + 80 * Math.sin((angle * Math.PI) / 180);
     return (
-      <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
-        <div className="relative mx-auto" style={{ width: 320, height: 320 }}>
-          <svg width={320} height={320} className="absolute inset-0 bg-white">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
+        <div className="relative mx-auto aspect-square w-full max-w-xl">
+          <svg viewBox="0 0 320 320" className="absolute inset-0 h-full w-full bg-white">
             <circle cx={cx} cy={cy} r={14} fill="#111111" />
           </svg>
           <div
             className="absolute inset-0 rounded-full"
             style={{
               background: `rgba(120,120,120,${contrastPct / 100})`,
-              margin: 60,
+              margin: '18.75%',
             }}
           />
         </div>

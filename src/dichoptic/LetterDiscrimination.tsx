@@ -4,6 +4,7 @@ import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useStaircase } from '../hooks/useStaircase';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
+import { useResponsiveSquareCanvas } from '../hooks/useResponsiveSquareCanvas';
 import {
   applyICR,
   channelColorAtIntensity,
@@ -25,7 +26,6 @@ const PARADIGM_LABELS: Record<Paradigm, string> = {
 };
 
 const MAX_TRIALS = 60;
-const CANVAS_SIZE = 320;
 
 function randomLetter(): string {
   return SLOAN_LETTERS[Math.floor(Math.random() * SLOAN_LETTERS.length)];
@@ -94,6 +94,7 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
   const { logSession } = useSessionLogger();
   const adaptiveICR = useAdaptiveICR();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { containerRef, size } = useResponsiveSquareCanvas();
 
   const startedAtRef = useRef(performance.now());
   const [paradigm, setParadigm] = useState<Paradigm | null>(null);
@@ -175,7 +176,7 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
 
   useEffect(() => {
     if (paradigm) drawTrial();
-  }, [paradigm, drawTrial]);
+  }, [paradigm, drawTrial, size]);
 
   function nextTrial() {
     setTarget(randomLetter());
@@ -269,17 +270,28 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
       <h2 className="text-lg font-semibold">{PARADIGM_LABELS[paradigm]}</h2>
-      <div className="text-xs text-gray-400">
-        Trial {trial + 1} / {MAX_TRIALS}
+      <div className="flex items-center justify-between text-xs text-gray-400">
+        <span>
+          Trial {trial + 1} / {MAX_TRIALS}
+        </span>
+        {trial > 0 && <span>{((correctCount / trial) * 100).toFixed(0)}% correct</span>}
       </div>
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
-        className="mx-auto rounded border border-gray-200 bg-[#808080]"
-      />
+      <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full bg-blue-600 transition-all"
+          style={{ width: `${(trial / MAX_TRIALS) * 100}%` }}
+        />
+      </div>
+      <div ref={containerRef} className="relative mx-auto aspect-square w-full">
+        <canvas
+          ref={canvasRef}
+          width={size}
+          height={size}
+          className="absolute inset-0 h-full w-full rounded border border-gray-200 bg-[#808080]"
+        />
+      </div>
       {paradigm === 'vernier' ? (
         <div className="flex justify-center gap-3">
           <button

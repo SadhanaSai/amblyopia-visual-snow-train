@@ -3,6 +3,7 @@ import { useProfile } from '../profile/ProfileContext';
 import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
+import { useResponsiveSquareCanvas } from '../hooks/useResponsiveSquareCanvas';
 import { fixationStabilityApplicable } from '../types/profile';
 import { applyICR, channelRgb, channelToRgbString, strongChannel, weakChannel } from '../utils/colorUtils';
 import { compositeAnaglyph } from '../utils/canvasUtils';
@@ -29,6 +30,7 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
   const { logSession } = useSessionLogger();
   const adaptiveICR = useAdaptiveICR();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { containerRef, size } = useResponsiveSquareCanvas();
 
   const applicable = fixationStabilityApplicable(profile.diagnosis);
   const runStartedAtRef = useRef(performance.now());
@@ -141,7 +143,7 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, drawStatic, pxPerDeg]);
+  }, [phase, drawStatic, pxPerDeg, size]);
 
   function startRun() {
     runStartedAtRef.current = performance.now();
@@ -268,19 +270,21 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
       <div className="flex justify-between text-xs text-gray-400">
         <span>
           Run {runIndex + 1} / {RUNS}
         </span>
         <span>{secondsLeft}s</span>
       </div>
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
-        className="mx-auto rounded border border-gray-200 bg-black"
-      />
+      <div ref={containerRef} className="relative mx-auto aspect-square w-full">
+        <canvas
+          ref={canvasRef}
+          width={size}
+          height={size}
+          className="absolute inset-0 h-full w-full rounded border border-gray-200 bg-black"
+        />
+      </div>
       <p className="text-center text-xs text-gray-500">Keep your gaze on the central cross.</p>
     </div>
   );

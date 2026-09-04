@@ -4,6 +4,7 @@ import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useStaircase } from '../hooks/useStaircase';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
+import { useResponsiveSquareCanvas } from '../hooks/useResponsiveSquareCanvas';
 import { compositeAnaglyph, drawSinusoidalGrating } from '../utils/canvasUtils';
 import { strongChannel, weakChannel } from '../utils/colorUtils';
 import type { StaircaseConfig } from '../types/staircase';
@@ -20,7 +21,6 @@ const MAX_TRIALS = 40;
 const STIMULUS_MS = 2000;
 const ISI_MS = 500;
 const RESPONSE_MS = 500;
-const CANVAS_SIZE = 320;
 
 type Phase = 'setup' | 'stimulus' | 'isi' | 'response' | 'done';
 
@@ -34,6 +34,7 @@ export default function GratingFusion({ onComplete }: GratingFusionProps) {
   const { logSession } = useSessionLogger();
   const adaptiveICR = useAdaptiveICR();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { containerRef, size } = useResponsiveSquareCanvas();
 
   const [spatialFrequency, setSpatialFrequency] = useState<(typeof SPATIAL_FREQUENCIES)[number]>(2);
   const [temporalCondition, setTemporalCondition] = useState<TemporalCondition>('static');
@@ -167,7 +168,7 @@ export default function GratingFusion({ onComplete }: GratingFusionProps) {
       if (intervalId !== undefined) window.clearInterval(intervalId);
       window.clearTimeout(stimTimeout);
     };
-  }, [phase, temporalCondition, drawTrial]);
+  }, [phase, temporalCondition, drawTrial, size]);
 
   useEffect(() => {
     if (phase !== 'isi') return;
@@ -261,16 +262,27 @@ export default function GratingFusion({ onComplete }: GratingFusionProps) {
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
-      <div className="text-xs text-gray-400">
-        Trial {trial + 1} / {MAX_TRIALS}
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
+      <div className="flex items-center justify-between text-xs text-gray-400">
+        <span>
+          Trial {trial + 1} / {MAX_TRIALS}
+        </span>
+        {trial > 0 && <span>{((fusionCount / trial) * 100).toFixed(0)}% fused</span>}
       </div>
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
-        className="mx-auto rounded border border-gray-200 bg-[#808080]"
-      />
+      <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full bg-blue-600 transition-all"
+          style={{ width: `${(trial / MAX_TRIALS) * 100}%` }}
+        />
+      </div>
+      <div ref={containerRef} className="relative mx-auto aspect-square w-full">
+        <canvas
+          ref={canvasRef}
+          width={size}
+          height={size}
+          className="absolute inset-0 h-full w-full rounded border border-gray-200 bg-[#808080]"
+        />
+      </div>
       <p className="text-center text-sm text-gray-600">
         Press <strong>F</strong> if fused (single oblique plaid) or <strong>R</strong> if rivalry
         (alternating patterns).

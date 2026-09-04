@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProfile } from '../profile/ProfileContext';
 import { useSessionLogger } from '../hooks/useSessionLogger';
+import { useResponsiveSquareCanvas } from '../hooks/useResponsiveSquareCanvas';
 
 type SubMode = 'convergence' | 'accommodativeRock' | 'noiseStability';
 
@@ -104,7 +105,7 @@ function ConvergencePushup({
         Look at both circles. If they fuse into one (or you see three), tap "Held" to bring them
         closer. Tap "Broke" the moment fusion breaks.
       </p>
-      <svg width={320} height={100} className="mx-auto">
+      <svg viewBox="0 0 320 100" className="mx-auto h-auto w-full max-w-lg">
         <circle cx={160 - separationPx / 2} cy={50} r={10} fill="#111111" />
         <circle cx={160 + separationPx / 2} cy={50} r={10} fill="#111111" />
       </svg>
@@ -242,6 +243,7 @@ function NoiseStability({
   const [done, setDone] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(STABILITY_DURATION_S);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { containerRef, size } = useResponsiveSquareCanvas();
   const rafRef = useRef<number | null>(null);
   const startRef = useRef(0);
 
@@ -333,14 +335,16 @@ function NoiseStability({
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
       <div className="text-center text-xs text-gray-400">{secondsLeft}s</div>
-      <canvas
-        ref={canvasRef}
-        width={320}
-        height={320}
-        className="mx-auto rounded border border-gray-200 bg-white"
-      />
+      <div ref={containerRef} className="relative mx-auto aspect-square w-full">
+        <canvas
+          ref={canvasRef}
+          width={size}
+          height={size}
+          className="absolute inset-0 h-full w-full rounded border border-gray-200 bg-white"
+        />
+      </div>
     </div>
   );
 }
