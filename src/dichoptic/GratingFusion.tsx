@@ -5,6 +5,7 @@ import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useStaircase } from '../hooks/useStaircase';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
 import { compositeAnaglyph, drawSinusoidalGrating } from '../utils/canvasUtils';
+import { strongChannel, weakChannel } from '../utils/colorUtils';
 import type { StaircaseConfig } from '../types/staircase';
 
 const SPATIAL_FREQUENCIES = [1, 2, 4, 8] as const;
@@ -73,7 +74,7 @@ export default function GratingFusion({ onComplete }: GratingFusionProps) {
         orientation: 90,
         phase: flipped ? Math.PI : 0,
         apertureSigmaPx,
-        color: 'red',
+        color: weakChannel(profile),
         pxPerDeg,
       });
       drawSinusoidalGrating(strong.getContext('2d')!, {
@@ -82,12 +83,12 @@ export default function GratingFusion({ onComplete }: GratingFusionProps) {
         orientation: 0,
         phase: flipped ? Math.PI : 0,
         apertureSigmaPx,
-        color: profile.lensType === 'red-green' ? 'green' : 'cyan',
+        color: strongChannel(profile),
         pxPerDeg,
       });
       compositeAnaglyph(weak, strong, ctx);
     },
-    [spatialFrequency, apertureSigmaPx, pxPerDeg, staircase.currentValue, profile.lensType],
+    [spatialFrequency, apertureSigmaPx, pxPerDeg, staircase.currentValue, profile.lensType, profile.weakEyeChannel],
   );
 
   const handleResponse = useCallback(

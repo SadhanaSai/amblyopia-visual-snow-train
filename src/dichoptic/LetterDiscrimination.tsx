@@ -4,10 +4,17 @@ import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useStaircase } from '../hooks/useStaircase';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
-import { applyICR, strongEyeBaseColor } from '../utils/colorUtils';
+import {
+  applyICR,
+  channelColorAtIntensity,
+  channelRgb,
+  channelToRgbString,
+  strongChannel,
+  weakChannel,
+  type Channel,
+} from '../utils/colorUtils';
 import { compositeAnaglyph, drawSloanLetter, SLOAN_LETTERS } from '../utils/canvasUtils';
 import type { StaircaseConfig } from '../types/staircase';
-import type { LensType } from '../types/profile';
 
 type Paradigm = 'flanked' | 'contrast' | 'vernier';
 
@@ -28,11 +35,11 @@ function drawBlankStrongField(
   ctx: CanvasRenderingContext2D,
   radiusPx: number,
   icr: number,
-  lensType: LensType,
+  channel: Channel,
 ): void {
   const { width, height } = ctx.canvas;
   ctx.save();
-  ctx.fillStyle = applyICR(strongEyeBaseColor(lensType), icr);
+  ctx.fillStyle = applyICR(channelRgb(channel), icr);
   ctx.beginPath();
   ctx.arc(width / 2, height / 2, radiusPx, 0, Math.PI * 2);
   ctx.fill();
@@ -115,31 +122,34 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
     const weakCtx = weak.getContext('2d')!;
     const strongCtx = strong.getContext('2d')!;
 
+    const weakCh = weakChannel(profile);
+    const strongCh = strongChannel(profile);
+    const weakColor = channelToRgbString(weakCh);
+
     if (paradigm === 'flanked') {
       const sizePx = Math.max(12, degToPx(0.4));
       const letterWidthPx = sizePx * 0.8;
       const spacingPx = letterWidthPx * staircase.currentValue;
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
-      drawSloanLetter(weakCtx, target, { centerX: cx - spacingPx, centerY: cy, sizePx, color: '#FF0000' });
-      drawSloanLetter(weakCtx, target, { centerX: cx + spacingPx, centerY: cy, sizePx, color: '#FF0000' });
-      drawSloanLetter(weakCtx, target, { centerX: cx, centerY: cy, sizePx, color: '#FF0000' });
-      drawBlankStrongField(strongCtx, sizePx * 2, strongEyeIcr, profile.lensType ?? 'red-cyan');
+      drawSloanLetter(weakCtx, target, { centerX: cx - spacingPx, centerY: cy, sizePx, color: weakColor });
+      drawSloanLetter(weakCtx, target, { centerX: cx + spacingPx, centerY: cy, sizePx, color: weakColor });
+      drawSloanLetter(weakCtx, target, { centerX: cx, centerY: cy, sizePx, color: weakColor });
+      drawBlankStrongField(strongCtx, sizePx * 2, strongEyeIcr, strongCh);
     } else if (paradigm === 'contrast') {
       const sizePx = Math.max(12, degToPx(0.5));
-      const gray = Math.round(255 * (1 - staircase.currentValue));
       drawSloanLetter(weakCtx, target, {
         centerX: canvas.width / 2,
         centerY: canvas.height / 2,
         sizePx,
-        color: `rgb(${gray}, 0, 0)`,
+        color: channelColorAtIntensity(weakCh, 1 - staircase.currentValue),
       });
-      drawBlankStrongField(strongCtx, sizePx * 1.5, strongEyeIcr, profile.lensType ?? 'red-cyan');
+      drawBlankStrongField(strongCtx, sizePx * 1.5, strongEyeIcr, strongCh);
     } else {
       const offsetPx = arcSecToPx(staircase.currentValue) * (vernierDirection === 'left' ? -1 : 1);
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
-      weakCtx.strokeStyle = '#FF0000';
+      weakCtx.strokeStyle = weakColor;
       weakCtx.lineWidth = 3;
       weakCtx.beginPath();
       weakCtx.moveTo(cx + offsetPx, cy - 30);
@@ -147,11 +157,21 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
       weakCtx.moveTo(cx, cy + 4);
       weakCtx.lineTo(cx, cy + 30);
       weakCtx.stroke();
-      drawBlankStrongField(strongCtx, 40, strongEyeIcr, profile.lensType ?? 'red-cyan');
+      drawBlankStrongField(strongCtx, 40, strongEyeIcr, strongCh);
     }
 
     compositeAnaglyph(weak, strong, ctx);
-  }, [paradigm, target, staircase.currentValue, vernierDirection, degToPx, arcSecToPx, strongEyeIcr, profile.lensType]);
+  }, [
+    paradigm,
+    target,
+    staircase.currentValue,
+    vernierDirection,
+    degToPx,
+    arcSecToPx,
+    strongEyeIcr,
+    profile.lensType,
+    profile.weakEyeChannel,
+  ]);
 
   useEffect(() => {
     if (paradigm) drawTrial();

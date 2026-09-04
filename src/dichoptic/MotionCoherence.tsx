@@ -12,6 +12,7 @@ import {
   type RDKConfig,
   type RDKState,
 } from '../utils/canvasUtils';
+import { strongChannel, weakChannel } from '../utils/colorUtils';
 import type { StaircaseConfig } from '../types/staircase';
 
 const SPEEDS = [3, 6, 12] as const;
@@ -78,6 +79,7 @@ export default function MotionCoherence({ onComplete }: MotionCoherenceProps) {
       dotLifetimeFrames: DOT_LIFETIME_FRAMES,
       fieldDiameterPx,
       dotRadiusPx: DOT_RADIUS_PX,
+      weakEyeColor: weakChannel(profile),
     };
 
     const coherent = createRDK(
@@ -104,7 +106,7 @@ export default function MotionCoherence({ onComplete }: MotionCoherenceProps) {
     const weakCtx = weak.getContext('2d')!;
     const strongCtx = strong.getContext('2d')!;
 
-    const strongEyeColor = profile.lensType === 'red-green' ? 'green' : 'cyan';
+    const strongEyeColor = strongChannel(profile);
 
     // Coherent (signal) dots: weak eye only, full contrast.
     drawRDK(weakCtx, coherentStateRef.current);
@@ -116,7 +118,7 @@ export default function MotionCoherence({ onComplete }: MotionCoherenceProps) {
     });
 
     compositeAnaglyph(weak, strong, ctx);
-  }, [profile.lensType]);
+  }, [profile.lensType, profile.weakEyeChannel]);
 
   const startTrial = useCallback(() => {
     const dir = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];

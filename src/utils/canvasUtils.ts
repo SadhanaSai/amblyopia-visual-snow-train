@@ -87,8 +87,10 @@ export interface RDKConfig {
   dotRadiusPx: number;
   eye: 'weak' | 'strong' | 'both';
   icr: number;
-  /** Non-red anaglyph channel color for the 'strong' eye — must match the physical lens. Defaults to 'cyan'. */
-  strongEyeColor?: 'cyan' | 'green';
+  /** Anaglyph channel color for the 'weak' eye — must match the physical lens. Defaults to 'red'. */
+  weakEyeColor?: 'red' | 'cyan' | 'green';
+  /** Anaglyph channel color for the 'strong' eye — must match the physical lens. Defaults to 'cyan'. */
+  strongEyeColor?: 'red' | 'cyan' | 'green';
 }
 
 interface RDKDot {
@@ -159,7 +161,7 @@ export function drawRDK(
   // luminance layer for side-by-side/screen-only display modes.
   const colorMode: 'red' | 'cyan' | 'green' | 'luminance' =
     state.config.eye === 'weak'
-      ? 'red'
+      ? (state.config.weakEyeColor ?? 'red')
       : state.config.eye === 'strong'
         ? (state.config.strongEyeColor ?? 'cyan')
         : 'luminance';
@@ -407,19 +409,32 @@ function targetPositionToXY(
   }
 }
 
-/**
- * Renders one eye's half of a random-dot stereogram. Call twice with the
- * same `seed` (eye: 'left' then eye: 'right') to produce a matched pair —
- * the target region's dots are shifted by `disparityPx` only for the right
- * eye, which is what makes the region pop out in depth once fused.
- */
-export function drawRDS(ctx: CanvasRenderingContext2D, opts: RDSOptions): void {
+// Clinical disparities near stereo-normal threshold (20-100 arcsec) subtend
+// well under one native canvas pixel at typical viewing distances/screen
+// densities. Drawing straight at native resolution leaves that shift
+// encoded in a single boundary pixel's antialiasing coverage — a weak,
+// easy-to-lose signal by the time it survives getImageData/putImageData
+// re-tinting and screen-blend compositing. Rendering at this supersampled
+// scale first, then downsampling in successive 2x steps (a "mipmap" chain,
+// which approximates a proper box filter — a single large downscale can
+// alias/moiré on the fine dot pattern instead), spreads the same fractional
+// shift into a genuine smooth intensity gradient across several final
+// pixels. This does not manufacture resolution the physical display can't
+// show; it only makes full use of what antialiasing can faithfully carry.
+// Callers are still responsible for not trusting disparities below the
+// device's actual resolving floor — see pxToArcSec / MIN_RELIABLE_DISPARITY_PX
+// in StereoTest.tsx.
+const RDS_SUPERSAMPLE = 4;
+
+function drawRDSAtScale(ctx: CanvasRenderingContext2D, opts: RDSOptions, scale: number): void {
   const { width, height } = ctx.canvas;
   const rand = mulberry32(opts.seed ?? 42);
-  const dotRadius = 2;
+  const dotRadius = 2 * scale;
   const density = 0.5;
   const cellSize = dotRadius * 2;
   const target = targetPositionToXY(opts.targetPosition, width, height);
+  const targetRegionRadius = opts.targetRegionRadius * scale;
+  const disparityPx = opts.disparityPx * scale;
 
   ctx.fillStyle = '#808080';
   ctx.fillRect(0, 0, width, height);
@@ -434,8 +449,8 @@ export function drawRDS(ctx: CanvasRenderingContext2D, opts: RDSOptions): void {
 
       const dx = x - target.x;
       const dy = y - target.y;
-      const inTarget = dx * dx + dy * dy <= opts.targetRegionRadius * opts.targetRegionRadius;
-      const drawX = inTarget && opts.eye === 'right' ? x + opts.disparityPx : x;
+      const inTarget = dx * dx + dy * dy <= targetRegionRadius * targetRegionRadius;
+      const drawX = inTarget && opts.eye === 'right' ? x + disparityPx : x;
 
       ctx.fillStyle = isBlack ? '#000000' : '#FFFFFF';
       ctx.beginPath();
@@ -443,4 +458,37 @@ export function drawRDS(ctx: CanvasRenderingContext2D, opts: RDSOptions): void {
       ctx.fill();
     }
   }
+}
+
+/**
+ * Renders one eye's half of a random-dot stereogram. Call twice with the
+ * same `seed` (eye: 'left' then eye: 'right') to produce a matched pair —
+ * the target region's dots are shifted by `disparityPx` only for the right
+ * eye, which is what makes the region pop out in depth once fused. Internally
+ * supersampled (see RDS_SUPERSAMPLE) so sub-pixel disparities are rendered
+ * as a real antialiased gradient rather than lost to native-resolution
+ * rounding.
+ */
+export function drawRDS(ctx: CanvasRenderingContext2D, opts: RDSOptions): void {
+  const { width, height } = ctx.canvas;
+  const hiRes = document.createElement('canvas');
+  hiRes.width = width * RDS_SUPERSAMPLE;
+  hiRes.height = height * RDS_SUPERSAMPLE;
+  drawRDSAtScale(hiRes.getContext('2d')!, opts, RDS_SUPERSAMPLE);
+
+  let src: HTMLCanvasElement = hiRes;
+  let srcScale = RDS_SUPERSAMPLE;
+  while (srcScale > 1) {
+    const nextScale = srcScale / 2;
+    const next = document.createElement('canvas');
+    next.width = Math.round(width * nextScale);
+    next.height = Math.round(height * nextScale);
+    const nextCtx = next.getContext('2d')!;
+    nextCtx.imageSmoothingEnabled = true;
+    nextCtx.imageSmoothingQuality = 'high';
+    nextCtx.drawImage(src, 0, 0, next.width, next.height);
+    src = next;
+    srcScale = nextScale;
+  }
+  ctx.drawImage(src, 0, 0, width, height);
 }

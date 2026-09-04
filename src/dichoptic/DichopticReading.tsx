@@ -3,7 +3,7 @@ import { useProfile } from '../profile/ProfileContext';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
 import { compositeAnaglyph, renderDichopticText } from '../utils/canvasUtils';
-import { strongEyeBaseColor } from '../utils/colorUtils';
+import { channelRgb, channelToRgbString, strongChannel, weakChannel } from '../utils/colorUtils';
 import { READING_CORPUS, type ReadingPassage } from '../data/readingCorpus';
 
 const HISTORY_KEY = 'reading_history';
@@ -76,6 +76,7 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
   const { profile, updateProfile } = useProfile();
   const { logSession } = useSessionLogger();
   const lensType = profile.lensType ?? 'red-cyan';
+  const weakEyeChannel = profile.weakEyeChannel ?? 'red';
   const adaptiveICR = useAdaptiveICR();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -113,8 +114,8 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
 
     const textOpts = {
       mode,
-      weakEyeColor: '#FF0000',
-      strongEyeColor: blendTowardBlack(strongEyeBaseColor(lensType), readingIcr),
+      weakEyeColor: channelToRgbString(weakChannel(profile)),
+      strongEyeColor: blendTowardBlack(channelRgb(strongChannel(profile)), readingIcr),
       canvasWidth: MAX_LINE_WIDTH,
       lineHeight: LINE_HEIGHT,
       fontSize: FONT_SIZE,
@@ -123,7 +124,7 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
     renderDichopticText(weak.getContext('2d')!, passage.text, { ...textOpts, onlyEye: 'weak' });
     renderDichopticText(strong.getContext('2d')!, passage.text, { ...textOpts, onlyEye: 'strong' });
     compositeAnaglyph(weak, strong, ctx);
-  }, [phase, passage, mode, readingIcr, lensType]);
+  }, [phase, passage, mode, readingIcr, profile]);
 
   function startPassage() {
     const next = pickPassage();
@@ -187,30 +188,51 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
           </div>
         </div>
         <p className="text-sm text-gray-600">
-          With glasses on — can you see RED but not GREEN or CYAN with your weak eye, and only one
-          of GREEN/CYAN (not RED) with your other eye?
+          With glasses on, look at each swatch through each eye and answer the two questions
+          below — molded glasses can't be reoriented, so instead of asking you to flip them, the
+          app matches its colors to whichever lens is actually over which eye.
         </p>
-        <p className="text-xs text-gray-500">
-          Anaglyph glasses come in two standards: <strong>red/cyan</strong> and{' '}
-          <strong>red/green</strong>. Whichever one of GREEN or CYAN comes through clearly with
-          your non-weak eye tells you which lens you have — set it below so the app renders the
-          matching color instead of one that leaks through your actual lens.
-        </p>
-        <div className="flex gap-2">
-          {(['red-cyan', 'red-green'] as const).map((lt) => (
-            <button
-              key={lt}
-              type="button"
-              onClick={() => updateProfile({ lensType: lt })}
-              className={`flex-1 rounded-lg border py-2 text-sm font-medium ${
-                lensType === lt
-                  ? 'border-blue-600 bg-blue-50 text-blue-700'
-                  : 'border-gray-300 text-gray-700'
-              }`}
-            >
-              {lt === 'red-cyan' ? 'Red / Cyan' : 'Red / Green'}
-            </button>
-          ))}
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-medium text-gray-600">
+            Which lens is over your <strong>weak</strong> ({profile.weakEye}) eye?
+          </p>
+          <div className="flex gap-2">
+            {(['red', 'other'] as const).map((wc) => (
+              <button
+                key={wc}
+                type="button"
+                onClick={() => updateProfile({ weakEyeChannel: wc })}
+                className={`flex-1 rounded-lg border py-2 text-sm font-medium ${
+                  weakEyeChannel === wc
+                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                    : 'border-gray-300 text-gray-700'
+                }`}
+              >
+                {wc === 'red' ? 'Red' : 'The other color'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-medium text-gray-600">
+            Whichever eye isn't red — is that lens GREEN or CYAN?
+          </p>
+          <div className="flex gap-2">
+            {(['red-cyan', 'red-green'] as const).map((lt) => (
+              <button
+                key={lt}
+                type="button"
+                onClick={() => updateProfile({ lensType: lt })}
+                className={`flex-1 rounded-lg border py-2 text-sm font-medium ${
+                  lensType === lt
+                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                    : 'border-gray-300 text-gray-700'
+                }`}
+              >
+                {lt === 'red-cyan' ? 'Cyan' : 'Green'}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex gap-2">
           <button
@@ -233,16 +255,22 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
   }
 
   if (phase === 'help') {
-    const weakLens = 'red';
     const strongLens = lensType === 'red-green' ? 'green' : 'cyan';
+    const weakLensLabel = weakEyeChannel === 'red' ? 'red' : strongLens;
+    const otherLensLabel = weakEyeChannel === 'red' ? strongLens : 'red';
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
         <h2 className="text-lg font-semibold">Glasses orientation</h2>
         <p className="text-sm text-gray-600">
           Your <strong>{profile.weakEye}</strong> eye is your weak eye and should look through the{' '}
-          <strong>{weakLens}</strong> lens. Your other eye should look through the{' '}
-          <strong>{strongLens}</strong> lens. If you can see both RED and {strongLens.toUpperCase()}{' '}
-          with the same eye, try flipping the glasses around.
+          <strong>{weakLensLabel}</strong> lens. Your other eye should look through the{' '}
+          <strong>{otherLensLabel}</strong> lens.
+        </p>
+        <p className="text-sm text-gray-600">
+          If that's backwards from what you're actually seeing, most anaglyph glasses can't be
+          physically reoriented to swap which eye sees which color — go back and use the two
+          questions there instead of trying to flip the glasses. The app will match its colors to
+          your glasses either way.
         </p>
         <button
           type="button"

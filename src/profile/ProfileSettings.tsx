@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Diagnosis, LensType, WeakEye } from '../types/profile';
+import type { Diagnosis, LensType, WeakEye, WeakEyeChannel } from '../types/profile';
 import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import CalibrationWizard from '../calibration/CalibrationWizard';
 import { useProfile } from './ProfileContext';
@@ -40,6 +40,31 @@ export default function ProfileSettings() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-sm font-semibold text-gray-700">Weak eye lens</h3>
+        <div className="flex gap-2">
+          {(['red', 'other'] as WeakEyeChannel[]).map((wc) => (
+            <button
+              key={wc}
+              type="button"
+              onClick={() => updateProfile({ weakEyeChannel: wc })}
+              className={`flex-1 rounded-lg border py-2 text-sm ${
+                (profile.weakEyeChannel ?? 'red') === wc
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 text-gray-700'
+              }`}
+            >
+              {wc === 'red' ? 'Red' : 'The other color'}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Which lens sits over your weak eye. Molded glasses can't be reoriented to put a chosen
+          color over a chosen eye, so instead of asking you to flip them, the app renders your
+          weak eye's content in whichever color your weak eye actually looks through.
+        </p>
       </section>
 
       <section>

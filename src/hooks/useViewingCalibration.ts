@@ -28,6 +28,8 @@ export interface UseViewingCalibrationReturn {
   needsRecalibration: boolean;
   degToPx: (degrees: number) => number;
   arcSecToPx: (arcsec: number) => number;
+  /** Inverse of arcSecToPx: the visual angle, in arc-seconds, that a given pixel offset subtends at the calibrated viewing distance. */
+  pxToArcSec: (px: number) => number;
   mmToPx: (mm: number) => number;
   saveCalibration: (data: NewCalibrationInput) => void;
   clearCalibration: () => void;
@@ -45,6 +47,14 @@ export function useViewingCalibration(): UseViewingCalibrationReturn {
     [ppmm],
   );
   const arcSecToPx = useCallback((arcsec: number) => degToPx(arcsec / 3600), [degToPx]);
+  const pxToArcSec = useCallback(
+    (px: number) => {
+      if (ppmm <= 0) return Infinity; // uncalibrated: no pixel offset can be trusted to represent any angle
+      const degrees = (Math.atan(px / (VIEWING_DISTANCE_MM * ppmm)) * 180) / Math.PI;
+      return degrees * 3600;
+    },
+    [ppmm],
+  );
   const mmToPx = useCallback((mm: number) => mm * ppmm, [ppmm]);
 
   const saveCalibration = useCallback((data: NewCalibrationInput) => {
@@ -75,6 +85,7 @@ export function useViewingCalibration(): UseViewingCalibrationReturn {
       daysSinceCalibration !== null && daysSinceCalibration >= RECALIBRATION_DAYS,
     degToPx,
     arcSecToPx,
+    pxToArcSec,
     mmToPx,
     saveCalibration,
     clearCalibration,

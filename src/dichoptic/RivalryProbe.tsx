@@ -4,6 +4,7 @@ import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useStaircase } from '../hooks/useStaircase';
 import { compositeAnaglyph, drawSinusoidalGrating } from '../utils/canvasUtils';
+import { strongChannel, weakChannel } from '../utils/colorUtils';
 import type { StaircaseConfig } from '../types/staircase';
 
 const CANVAS_SIZE = 320;
@@ -68,7 +69,7 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
         orientation: 0,
         phase: 0,
         apertureSigmaPx,
-        color: profile.lensType === 'red-green' ? 'green' : 'cyan',
+        color: strongChannel(profile),
         pxPerDeg,
       });
       const weak = document.createElement('canvas');
@@ -81,13 +82,13 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
           orientation: 90,
           phase: 0,
           apertureSigmaPx,
-          color: 'red',
+          color: weakChannel(profile),
           pxPerDeg,
         });
       }
       compositeAnaglyph(weak, strong, ctx);
     },
-    [apertureSigmaPx, pxPerDeg, profile.lensType],
+    [apertureSigmaPx, pxPerDeg, profile.lensType, profile.weakEyeChannel],
   );
 
   function finish() {

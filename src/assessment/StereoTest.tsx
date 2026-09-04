@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProfile } from '../profile/ProfileContext';
 import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { compositeAnaglyph, drawRDS, type RDSOptions } from '../utils/canvasUtils';
+import { channelForEye, type Channel } from '../utils/colorUtils';
 import {
   ENTROPY_STOP_BITS,
   MAX_TRIALS,
@@ -23,6 +24,17 @@ const CANVAS_SIZE = 320;
 const TARGET_REGION_RADIUS = 80;
 const HAS_GLASSES_KEY = 'has_anaglyph_glasses';
 
+// A disparity that subtends less than this many canvas pixels can't be
+// trusted as a real measurement: below roughly half a pixel, the rendered
+// target-region offset is so close to the antialiasing noise floor of the
+// display/rendering pipeline (even with the supersampled drawRDS) that a
+// "correct" response stops being evidence of real stereopsis and starts
+// being evidence of a lucky guess. Reporting a threshold finer than the
+// display can actually resolve would be a fabricated number, not a
+// measurement — so this level is used to clamp which of the disparities
+// above are actually administered on a given device, see `testableLevels`.
+const MIN_RELIABLE_DISPARITY_PX = 0.5;
+
 const CLINICAL_LINES = [
   { arcsec: 800, label: 'gross stereopsis' },
   { arcsec: 200, label: 'functional' },
@@ -39,7 +51,7 @@ const POSITIONS: { value: Position; label: string }[] = [
 ];
 
 /** Remaps a grayscale RDS canvas into a single anaglyph channel (red, cyan, or green). */
-function tintToChannel(source: HTMLCanvasElement, channel: 'red' | 'cyan' | 'green'): HTMLCanvasElement {
+function tintToChannel(source: HTMLCanvasElement, channel: Channel): HTMLCanvasElement {
   const out = document.createElement('canvas');
   out.width = source.width;
   out.height = source.height;
@@ -78,10 +90,22 @@ interface StereoTestProps {
 
 export default function StereoTest({ onComplete }: StereoTestProps) {
   const { profile } = useProfile();
-  const { arcSecToPx } = useViewingCalibration();
+  const { arcSecToPx, pxToArcSec } = useViewingCalibration();
   const { logStereo, logSession } = useSessionLogger();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const startedAtRef = useRef(performance.now());
+
+  // Which of the fixed disparity levels this device/calibration can
+  // actually render reliably (see MIN_RELIABLE_DISPARITY_PX). Uncalibrated
+  // (ppmm=0) makes pxToArcSec return Infinity, so every level is excluded —
+  // correctly refusing to test rather than silently presenting disparities
+  // with no known physical size.
+  const minReliableArcsec = pxToArcSec(MIN_RELIABLE_DISPARITY_PX);
+  const testableLevels = useMemo(
+    () => DISPARITY_LEVELS_ARCSEC.filter((arcsec) => arcsec >= minReliableArcsec),
+    [minReliableArcsec],
+  );
+  const canAdminister = testableLevels.length >= 2;
 
   const [hasGlasses, setHasGlasses] = useState<boolean | null>(() => {
     const stored = localStorage.getItem(HAS_GLASSES_KEY);
@@ -90,7 +114,7 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
 
   const [posterior, setPosterior] = useState<StereoPosterior>(() => initStereoPosterior());
   const [currentArcsec, setCurrentArcsec] = useState<number>(() =>
-    selectNextStereoStimulus(initStereoPosterior(), DISPARITY_LEVELS_ARCSEC),
+    selectNextStereoStimulus(initStereoPosterior(), canAdminister ? testableLevels : DISPARITY_LEVELS_ARCSEC),
   );
   const [target, setTarget] = useState<Position>(pickTarget);
   const [trial, setTrial] = useState(0);
@@ -99,7 +123,7 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
   const [noStereopsis, setNoStereopsis] = useState(false);
 
   useEffect(() => {
-    if (hasGlasses !== true || done) return;
+    if (hasGlasses !== true || done || !canAdminister) return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -129,9 +153,28 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
       seed,
     });
 
-    const strongChannel = profile.lensType === 'red-green' ? 'green' : 'cyan';
-    compositeAnaglyph(tintToChannel(left, 'red'), tintToChannel(right, strongChannel), ctx);
-  }, [hasGlasses, done, currentArcsec, target, trial, arcSecToPx, profile.lensType]);
+    // The RDS 'left'/'right' halves stand for what each anatomical eye
+    // should see; which physical channel (red vs. the other anaglyph
+    // color) belongs to which eye depends on the profile's weak eye and
+    // glasses — not a fixed "left is always red" assumption, matching the
+    // rest of the dichoptic exercises (colorUtils.channelForEye).
+    compositeAnaglyph(
+      tintToChannel(left, channelForEye(profile, 'left')),
+      tintToChannel(right, channelForEye(profile, 'right')),
+      ctx,
+    );
+  }, [
+    hasGlasses,
+    done,
+    canAdminister,
+    currentArcsec,
+    target,
+    trial,
+    arcSecToPx,
+    profile.lensType,
+    profile.weakEyeChannel,
+    profile.weakEye,
+  ]);
 
   function respond(guess: Position) {
     const correct = guess === target;
@@ -146,14 +189,14 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
     // — whichever comes first, after a minimum number of trials, with a
     // fixed max as a safety net regardless of convergence.
     const entropy = marginalThresholdEntropy(nextPosterior);
-    const pNoStereopsis = probabilityNoStereopsis(nextPosterior, DISPARITY_LEVELS_ARCSEC[0]);
+    const pNoStereopsis = probabilityNoStereopsis(nextPosterior, testableLevels[0]);
     const converged = entropy <= ENTROPY_STOP_BITS || pNoStereopsis >= NO_STEREOPSIS_PROBABILITY;
     const shouldStop = nextTrial >= MAX_TRIALS || (nextTrial >= MIN_TRIALS && converged);
 
     if (shouldStop) {
       const isNoStereopsis = pNoStereopsis >= NO_STEREOPSIS_PROBABILITY;
-      const smallestTested = DISPARITY_LEVELS_ARCSEC[DISPARITY_LEVELS_ARCSEC.length - 1];
-      const largestTested = DISPARITY_LEVELS_ARCSEC[0];
+      const smallestTested = testableLevels[testableLevels.length - 1];
+      const largestTested = testableLevels[0];
       const rawMean = Math.pow(10, meanLogThreshold(nextPosterior));
       const finalArcsec = isNoStereopsis
         ? largestTested
@@ -191,8 +234,37 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
 
     setPosterior(nextPosterior);
     setTrial(nextTrial);
-    setCurrentArcsec(selectNextStereoStimulus(nextPosterior, DISPARITY_LEVELS_ARCSEC));
+    setCurrentArcsec(selectNextStereoStimulus(nextPosterior, testableLevels));
     setTarget(pickTarget());
+  }
+
+  if (!canAdminister) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
+        <h2 className="text-lg font-semibold">Stereoacuity Test — can't be run yet</h2>
+        <p className="text-sm text-gray-600">
+          {Number.isFinite(minReliableArcsec) ? (
+            <>
+              At your current calibration, disparities finer than{' '}
+              <strong>{minReliableArcsec.toFixed(0)} arc-sec</strong> can't be rendered as more
+              than a fraction of a screen pixel — too small to trust as a real depth cue. That
+              leaves too few of this test's levels to measure a threshold, so reporting a number
+              anyway would be a guess dressed up as a measurement, not a real result.
+            </>
+          ) : (
+            <>
+              No viewing-distance calibration is on record, so pixel disparities can't be
+              converted to a physical visual angle at all.
+            </>
+          )}
+        </p>
+        <p className="text-sm text-gray-600">
+          Run (or re-run) calibration under Settings, ideally on a smaller, higher-resolution
+          display if you have one — that raises how fine a disparity this test can validly
+          measure.
+        </p>
+      </div>
+    );
   }
 
   if (hasGlasses === null) {
@@ -203,6 +275,13 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
           This test requires red/cyan or red/green anaglyph glasses to view the depth stimulus.
           Set which kind you have under Settings → Lens type.
         </p>
+        {testableLevels.length < DISPARITY_LEVELS_ARCSEC.length && (
+          <p className="text-xs text-gray-500">
+            Your display can validly measure stereoacuity down to about{' '}
+            <strong>{testableLevels[testableLevels.length - 1]} arc-sec</strong> — finer than
+            that isn't distinguishable from a guess on this device.
+          </p>
+        )}
         <div className="flex gap-2">
           <button
             type="button"
@@ -271,6 +350,14 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
         ) : (
           <p className="text-sm text-gray-700">
             Threshold: <strong>{thresholdArcsec.toFixed(0)} arc-sec</strong>
+          </p>
+        )}
+        {testableLevels.length < DISPARITY_LEVELS_ARCSEC.length && (
+          <p className="text-xs text-gray-500">
+            Measurement floor for your display: this test could only validly distinguish
+            thresholds down to <strong>{testableLevels[testableLevels.length - 1]} arc-sec</strong>
+            {' '}— it can't tell a finer real threshold from a guess on this device, so treat any
+            result at that floor as "at least this good," not exact.
           </p>
         )}
         <ul className="text-xs text-gray-500">

@@ -4,7 +4,7 @@ import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
 import { fixationStabilityApplicable } from '../types/profile';
-import { applyICR, strongEyeBaseColor } from '../utils/colorUtils';
+import { applyICR, channelRgb, channelToRgbString, strongChannel, weakChannel } from '../utils/colorUtils';
 import { compositeAnaglyph } from '../utils/canvasUtils';
 
 const RUNS = 4;
@@ -57,7 +57,8 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
       const strongCtx = strong.getContext('2d')!;
 
       // Central fixation cross — weak eye.
-      weakCtx.strokeStyle = '#FF0000';
+      const weakColor = channelToRgbString(weakChannel(profile));
+      weakCtx.strokeStyle = weakColor;
       weakCtx.lineWidth = 2;
       weakCtx.beginPath();
       weakCtx.moveTo(cx - 6, cy);
@@ -67,17 +68,14 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
       weakCtx.stroke();
 
       if (distractor) {
-        weakCtx.fillStyle = '#FF0000';
+        weakCtx.fillStyle = weakColor;
         weakCtx.beginPath();
         weakCtx.arc(distractor.xPx, distractor.yPx, 3, 0, Math.PI * 2);
         weakCtx.fill();
       }
 
       // Surround ring — strong eye, ICR contrast.
-      strongCtx.strokeStyle = applyICR(
-        strongEyeBaseColor(profile.lensType ?? 'red-cyan'),
-        adaptiveICR.currentICR,
-      );
+      strongCtx.strokeStyle = applyICR(channelRgb(strongChannel(profile)), adaptiveICR.currentICR);
       strongCtx.lineWidth = 2;
       strongCtx.beginPath();
       strongCtx.arc(cx, cy, 80, 0, Math.PI * 2);
@@ -85,7 +83,7 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
 
       compositeAnaglyph(weak, strong, ctx);
     },
-    [adaptiveICR.currentICR, profile.lensType],
+    [adaptiveICR.currentICR, profile.lensType, profile.weakEyeChannel],
   );
 
   // Countdown timer for the active run.

@@ -1,4 +1,4 @@
-import { DEFAULT_LENS_TYPE, type UserProfile } from '../types/profile';
+import { DEFAULT_LENS_TYPE, DEFAULT_WEAK_EYE_CHANNEL, type UserProfile } from '../types/profile';
 
 const STORAGE_KEY = 'profile';
 
@@ -26,6 +26,7 @@ export function createDefaultProfile(): UserProfile {
     calibration: null,
     createdAt: new Date().toISOString(),
     lensType: DEFAULT_LENS_TYPE,
+    weakEyeChannel: DEFAULT_WEAK_EYE_CHANNEL,
   };
 }
 
