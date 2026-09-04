@@ -1,8 +1,20 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { StereoResult } from '../types/assessment';
-import { DEFAULT_MARGIN, drawAxes, drawHLine, drawLine, formatShortDate, scaleLinear } from './chartUtils';
+import ChartCard from './ChartCard';
+import ChartTooltip from './ChartTooltip';
+import {
+  DEFAULT_MARGIN,
+  dateDomain,
+  drawAxes,
+  drawDateTicks,
+  drawHLine,
+  drawLine,
+  formatShortDate,
+  scaleLinear,
+} from './chartUtils';
+import { useChartTooltip, type TooltipPoint } from './useChartTooltip';
+import { useResponsiveChartCanvas } from './useResponsiveChartCanvas';
 
-const WIDTH = 640;
 const HEIGHT = 240;
 const LOG_BEST = Math.log10(20); // best plausible threshold, plots at top
 const LOG_WORST = Math.log10(1000);
@@ -19,53 +31,62 @@ interface StereoChartProps {
 }
 
 export default function StereoChart({ results }: StereoChartProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const m = DEFAULT_MARGIN;
+  const { containerRef, canvasRef, width } = useResponsiveChartCanvas(HEIGHT);
+  const yFor = (logValue: number) => scaleLinear(logValue, [LOG_BEST, LOG_WORST], [m.top, HEIGHT - m.bottom]);
+  const [domainStart, domainEnd] = useMemo(() => dateDomain(results.map((r) => r.date)), [results]);
+  const xFor = (iso: string) =>
+    scaleLinear(new Date(iso).getTime(), [domainStart, domainEnd], [m.left + 8, width - m.right - 8]);
+
+  const tooltipPoints = useMemo<TooltipPoint[]>(
+    () =>
+      results.map((r) => ({
+        x: xFor(r.date),
+        y: yFor(r.logThreshold),
+        label: formatShortDate(r.date),
+        value: r.noMeasurableStereopsis ? `>${r.thresholdArcsec} arcsec (not measurable)` : `${r.thresholdArcsec} arcsec`,
+      })),
+    [results, domainStart, domainEnd, width],
+  );
+  const { hover, handleMouseMove, handleMouseLeave } = useChartTooltip(canvasRef, tooltipPoints, width);
 
   useEffect(() => {
     if (results.length === 0) return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, WIDTH, HEIGHT);
-    const m = DEFAULT_MARGIN;
-    drawAxes(ctx, WIDTH, HEIGHT, m);
-
-    const yFor = (logValue: number) =>
-      scaleLinear(logValue, [LOG_BEST, LOG_WORST], [m.top, HEIGHT - m.bottom]);
+    ctx.clearRect(0, 0, width, HEIGHT);
+    drawAxes(ctx, width, HEIGHT, m);
 
     for (const line of CLINICAL_LINES) {
-      drawHLine(ctx, yFor(Math.log10(line.arcsec)), m.left, WIDTH - m.right, '#D1D5DB', line.label);
+      drawHLine(ctx, yFor(Math.log10(line.arcsec)), m.left, width - m.right, '#D1D5DB', line.label);
     }
 
-    const xFor = (i: number, n: number) =>
-      scaleLinear(i, [0, Math.max(1, n - 1)], [m.left + 8, WIDTH - m.right - 8]);
-    const points = results.map((r, i) => ({ x: xFor(i, results.length), y: yFor(r.logThreshold) }));
+    const points = results.map((r) => ({ x: xFor(r.date), y: yFor(r.logThreshold) }));
     drawLine(ctx, points, '#2563EB');
 
-    ctx.fillStyle = '#6B7280';
-    ctx.font = '10px system-ui';
-    ctx.fillText(formatShortDate(results[0].date), m.left, HEIGHT - m.bottom + 14);
-    ctx.fillText(
-      formatShortDate(results[results.length - 1].date),
-      WIDTH - m.right - 30,
-      HEIGHT - m.bottom + 14,
-    );
-  }, [results]);
+    drawDateTicks(ctx, [domainStart, domainEnd], [m.left + 8, width - m.right - 8], HEIGHT - m.bottom + 14);
+  }, [results, domainStart, domainEnd, width]);
 
   if (results.length === 0) {
     return (
-      <div>
-        <h3 className="mb-2 text-sm font-semibold text-gray-700">Stereoacuity</h3>
+      <ChartCard title="Stereoacuity">
         <p className="text-xs text-gray-400">Run the Stereo Test (requires anaglyph glasses) to see this chart.</p>
-      </div>
+      </ChartCard>
     );
   }
 
   return (
-    <div>
-      <h3 className="mb-2 text-sm font-semibold text-gray-700">Stereoacuity</h3>
-      <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} className="w-full rounded border border-gray-100" />
-      <div className="mt-1 text-xs text-gray-400">Lower arc-seconds = better</div>
-    </div>
+    <ChartCard title="Stereoacuity" footer={<span>Lower arc-seconds = better</span>}>
+      <div ref={containerRef} className="relative">
+        <canvas
+          ref={canvasRef}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          className="block cursor-crosshair rounded border border-gray-100"
+        />
+        <ChartTooltip hover={hover} width={width} height={HEIGHT} />
+      </div>
+    </ChartCard>
   );
 }

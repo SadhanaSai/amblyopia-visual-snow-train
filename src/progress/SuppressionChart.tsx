@@ -1,8 +1,21 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { SuppressionResult } from '../types/assessment';
-import { DEFAULT_MARGIN, drawAxes, drawLine, drawShadedArea, formatShortDate, scaleLinear } from './chartUtils';
+import ChartCard from './ChartCard';
+import ChartTooltip from './ChartTooltip';
+import {
+  DEFAULT_MARGIN,
+  dateDomain,
+  drawAxes,
+  drawDateTicks,
+  drawLine,
+  drawShadedArea,
+  drawYGrid,
+  formatShortDate,
+  scaleLinear,
+} from './chartUtils';
+import { useChartTooltip, type TooltipPoint } from './useChartTooltip';
+import { useResponsiveChartCanvas } from './useResponsiveChartCanvas';
 
-const WIDTH = 640;
 const HEIGHT = 200;
 
 interface SuppressionChartProps {
@@ -10,43 +23,59 @@ interface SuppressionChartProps {
 }
 
 export default function SuppressionChart({ results }: SuppressionChartProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const m = DEFAULT_MARGIN;
+  const { containerRef, canvasRef, width } = useResponsiveChartCanvas(HEIGHT);
+  const maxVal = Math.max(10, ...results.map((r) => r.thresholdContrastPct));
+  const yFor = (v: number) => scaleLinear(v, [0, maxVal], [m.top, HEIGHT - m.bottom]);
+  const [domainStart, domainEnd] = useMemo(() => dateDomain(results.map((r) => r.date)), [results]);
+  const xFor = (iso: string) =>
+    scaleLinear(new Date(iso).getTime(), [domainStart, domainEnd], [m.left + 8, width - m.right - 8]);
+
+  const tooltipPoints = useMemo<TooltipPoint[]>(
+    () =>
+      results.map((r) => ({
+        x: xFor(r.date),
+        y: yFor(r.thresholdContrastPct),
+        label: formatShortDate(r.date),
+        value: `${r.thresholdContrastPct.toFixed(1)}%`,
+      })),
+    [results, domainStart, domainEnd, maxVal, width],
+  );
+  const { hover, handleMouseMove, handleMouseLeave } = useChartTooltip(canvasRef, tooltipPoints, width);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, WIDTH, HEIGHT);
-    const m = DEFAULT_MARGIN;
-    drawAxes(ctx, WIDTH, HEIGHT, m);
+    ctx.clearRect(0, 0, width, HEIGHT);
 
-    const maxVal = Math.max(10, ...results.map((r) => r.thresholdContrastPct));
-    // Inverted: lower contrast threshold (less suppression) plots higher on the chart.
-    const yFor = (v: number) => scaleLinear(v, [0, maxVal], [m.top, HEIGHT - m.bottom]);
-    const xFor = (i: number, n: number) =>
-      scaleLinear(i, [0, Math.max(1, n - 1)], [m.left + 8, WIDTH - m.right - 8]);
+    drawYGrid(ctx, m, width, [
+      { y: yFor(0), label: '0%' },
+      { y: yFor(maxVal / 2), label: `${(maxVal / 2).toFixed(0)}%` },
+      { y: yFor(maxVal), label: `${maxVal.toFixed(0)}%` },
+    ]);
+    drawAxes(ctx, width, HEIGHT, m);
 
-    const points = results.map((r, i) => ({ x: xFor(i, results.length), y: yFor(r.thresholdContrastPct) }));
+    const points = results.map((r) => ({ x: xFor(r.date), y: yFor(r.thresholdContrastPct) }));
     drawShadedArea(ctx, points, HEIGHT - m.bottom, 'rgba(37, 99, 235, 0.08)');
     drawLine(ctx, points, '#2563EB');
 
     if (results.length > 0) {
-      ctx.fillStyle = '#6B7280';
-      ctx.font = '10px system-ui';
-      ctx.fillText(formatShortDate(results[0].date), m.left, HEIGHT - m.bottom + 14);
-      ctx.fillText(
-        formatShortDate(results[results.length - 1].date),
-        WIDTH - m.right - 30,
-        HEIGHT - m.bottom + 14,
-      );
+      drawDateTicks(ctx, [domainStart, domainEnd], [m.left + 8, width - m.right - 8], HEIGHT - m.bottom + 14);
     }
-  }, [results]);
+  }, [results, domainStart, domainEnd, maxVal, width]);
 
   return (
-    <div>
-      <h3 className="mb-2 text-sm font-semibold text-gray-700">Suppression Depth</h3>
-      <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} className="w-full rounded border border-gray-100" />
-      <div className="mt-1 text-xs text-gray-400">Lower = less suppression (better)</div>
-    </div>
+    <ChartCard title="Suppression Depth" footer={<span>Lower = less suppression (better)</span>}>
+      <div ref={containerRef} className="relative">
+        <canvas
+          ref={canvasRef}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          className="block cursor-crosshair rounded border border-gray-100"
+        />
+        <ChartTooltip hover={hover} width={width} height={HEIGHT} />
+      </div>
+    </ChartCard>
   );
 }

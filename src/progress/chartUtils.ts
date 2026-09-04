@@ -47,12 +47,19 @@ export function drawLine(
   ctx.save();
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   if (dashed) ctx.setLineDash([6, 4]);
   ctx.beginPath();
   points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
   ctx.stroke();
   ctx.setLineDash([]);
+  // Halo-ringed markers: a white ring keeps the dot crisp against gridlines/fills.
   points.forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
     ctx.beginPath();
     ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
     ctx.fillStyle = color;
@@ -114,7 +121,34 @@ export function drawHLine(
   ctx.setLineDash([]);
   ctx.fillStyle = color;
   ctx.font = '10px system-ui';
-  ctx.fillText(label, xStart + 4, y - 2);
+  // Right-aligned: data series generally start near their baseline at the
+  // left edge, so anchoring labels to the right avoids sitting on top of it.
+  const textWidth = ctx.measureText(label).width;
+  ctx.fillText(label, xEnd - textWidth - 4, y - 2);
+  ctx.restore();
+}
+
+/** Light horizontal gridlines with left-aligned value labels, drawn behind the
+ * data so the y-axis has a readable scale instead of a bare line. */
+export function drawYGrid(
+  ctx: CanvasRenderingContext2D,
+  margin: ChartMargin,
+  width: number,
+  ticks: { y: number; label: string }[],
+): void {
+  ctx.save();
+  ctx.font = '10px system-ui';
+  ctx.textBaseline = 'middle';
+  for (const { y, label } of ticks) {
+    ctx.strokeStyle = '#F3F4F6';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margin.left, y);
+    ctx.lineTo(width - margin.right, y);
+    ctx.stroke();
+    ctx.fillStyle = '#9CA3AF';
+    ctx.fillText(label, 2, y);
+  }
   ctx.restore();
 }
 
@@ -123,9 +157,45 @@ export function formatShortDate(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/** Calendar-day key (local ISO date) for grouping sessions by day. */
+/** Draws up to `count` evenly time-spaced date labels along a chart's x-axis.
+ * Used once real dates (not array index) determine point spacing, so a
+ * "first/last date" footer alone would misrepresent irregular gaps. */
+export function drawDateTicks(
+  ctx: CanvasRenderingContext2D,
+  domain: [number, number],
+  range: [number, number],
+  y: number,
+  count = 4,
+): void {
+  const [d0, d1] = domain;
+  ctx.save();
+  ctx.fillStyle = '#6B7280';
+  ctx.font = '10px system-ui';
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0.5 : i / (count - 1);
+    const value = d0 + t * (d1 - d0);
+    const x = scaleLinear(value, domain, range);
+    const label = formatShortDate(new Date(value).toISOString());
+    const textWidth = ctx.measureText(label).width;
+    const clampedX = Math.min(Math.max(x - textWidth / 2, range[0]), range[1] - textWidth);
+    ctx.fillText(label, clampedX, y);
+  }
+  ctx.restore();
+}
+
+/** Calendar-day key (local date) for grouping sessions by day. */
 export function dayKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = (date.getMonth() + 1).toString().padStart(2, '0');
+  const d = date.getDate().toString().padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** [min, max] timestamp (ms) spanned by a set of ISO date strings, for scaling
+ * chart x-axes by real elapsed time instead of by array index. */
+export function dateDomain(dates: string[]): [number, number] {
+  const times = dates.map((d) => new Date(d).getTime());
+  return [Math.min(...times), Math.max(...times)];
 }
 
 /** Sums durationSeconds (as minutes) per calendar day, keyed by dayKey(). */
