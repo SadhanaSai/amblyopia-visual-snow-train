@@ -158,12 +158,37 @@ export default function App() {
   );
 }
 
+function ZoomWarningBanner({ onRecalibrate }: { onRecalibrate: () => void }) {
+  return (
+    <div className="mx-4 mt-4 flex flex-col gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-800">
+      <p>
+        Your browser zoom has changed since you calibrated — stimulus sizes and any on-screen
+        measurements will be wrong until you recalibrate.
+      </p>
+      <button
+        type="button"
+        onClick={onRecalibrate}
+        className="self-start rounded-full bg-red-600 px-3 py-1.5 font-medium text-white"
+      >
+        Recalibrate now
+      </button>
+    </div>
+  );
+}
+
 function MainApp() {
   const [tab, setTab] = useState<Tab>('train');
+  const { zoomChanged } = useViewingCalibration();
+  const [recalibrating, setRecalibrating] = useState(false);
+
+  if (recalibrating) {
+    return <CalibrationWizard onComplete={() => setRecalibrating(false)} />;
+  }
 
   return (
     <div className="flex min-h-screen flex-col pb-16">
       <div className="flex-1 overflow-y-auto">
+        {zoomChanged && <ZoomWarningBanner onRecalibrate={() => setRecalibrating(true)} />}
         {tab === 'train' && <TrainTab />}
         {tab === 'assess' && <AssessTab />}
         {tab === 'progress' && <ProgressDashboard />}

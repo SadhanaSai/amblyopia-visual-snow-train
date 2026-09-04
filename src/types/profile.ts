@@ -31,6 +31,11 @@ export interface CalibrationData {
   inrDenomination?: number;
   calibratedAt: string; // ISO8601
   viewingDistanceMm: number;
+  /** window.devicePixelRatio at the moment calibration was saved — lets later code
+   * detect a browser zoom change, which alters the CSS-px-to-mm mapping `ppmm` was
+   * derived from without changing any CSS-px layout measurement. Optional for
+   * backward compatibility with calibrations saved before this field existed. */
+  devicePixelRatioAtCalibration?: number;
 }
 
 export interface UserProfile {
