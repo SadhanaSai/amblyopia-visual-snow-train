@@ -19,21 +19,50 @@ import {
   type StereoPosterior,
 } from '../utils/stereoQuest';
 
-const DISPARITY_LEVELS_ARCSEC = [800, 400, 200, 100, 60, 40, 20];
+// Spacing matches clinical circle-test progressions (Randot/Titmus use a
+// similar near-halving-then-finer-graduated series, not uniform octaves) —
+// each of the original 7 levels doubled in disparity from the next, which
+// is a large perceptual jump even one step at a time. Denser spacing near
+// the difficult end gives the staircase (see neighborLevels) smaller,
+// gentler steps once it's narrowing in, instead of every step feeling like
+// a cliff.
+const DISPARITY_LEVELS_ARCSEC = [800, 400, 200, 140, 100, 70, 50, 40, 30, 25, 20];
 const CANVAS_SIZE = 320;
 const TARGET_REGION_RADIUS = 80;
 const HAS_GLASSES_KEY = 'has_anaglyph_glasses';
 
-// A disparity that subtends less than this many canvas pixels can't be
-// trusted as a real measurement: below roughly half a pixel, the rendered
-// target-region offset is so close to the antialiasing noise floor of the
-// display/rendering pipeline (even with the supersampled drawRDS) that a
-// "correct" response stops being evidence of real stereopsis and starts
-// being evidence of a lucky guess. Reporting a threshold finer than the
-// display can actually resolve would be a fabricated number, not a
-// measurement — so this level is used to clamp which of the disparities
-// above are actually administered on a given device, see `testableLevels`.
+// Fixed dot element size. Scaling this down toward the disparity (the
+// Julesz "small element relative to disparity" guideline) was tried and
+// made the whole field fainter/harder to read on lower-pixel-density
+// displays — legibility of the base noise pattern is the binding
+// constraint here, not correspondence ambiguity, so this stays constant
+// rather than shrinking on fine trials.
+const DOT_RADIUS_PX = 2;
+
+// A disparity that subtends less than this many CSS px can't be trusted as
+// a real measurement: below roughly half a pixel, even a faithfully
+// dpr-scaled, supersampled render is at the noise floor of what the display
+// can represent. This is deliberately NOT tied to dot size — real stereo
+// hyperacuity resolves shifts far smaller than a single dot by pooling
+// correspondence across the hundreds of dots in the target region, which is
+// exactly why clinical RDS tests can measure well below one dot-width on
+// ordinary displays; requiring the shift to match a full dot diameter was
+// solving a rendering-fidelity problem (now fixed by scaling the canvas
+// backing buffer to devicePixelRatio, see the render effect below) with a
+// perceptual-floor argument that doesn't actually apply here. Reporting a
+// threshold finer than the display can actually render would still be a
+// fabricated number, not a measurement — so this level is used to clamp
+// which of the disparities above are actually administered on a given
+// device, see `testableLevels`.
 const MIN_RELIABLE_DISPARITY_PX = 0.5;
+
+// Clinical stereoacuity screening (Randot, Titmus) always presents the
+// largest, easiest target first to confirm the participant can perform the
+// task at all before narrowing in — the same principle applies here so a
+// "no measurable stereopsis" or "test seems broken" impression isn't formed
+// before the adaptive procedure has even had a chance to show an
+// unambiguous disparity.
+const INITIAL_EASY_TRIALS = 2;
 
 const CLINICAL_LINES = [
   { arcsec: 800, label: 'gross stereopsis' },
@@ -80,6 +109,26 @@ function tintToChannel(source: HTMLCanvasElement, channel: Channel): HTMLCanvasE
   return out;
 }
 
+/**
+ * Restricts entropy-maximizing selection to the level adjacent to
+ * `currentArcsec` in each direction. Unconstrained, selectNextStereoStimulus
+ * can jump straight from the easiest level to one of the hardest after just
+ * a couple of correct responses: two correct answers at 800" barely
+ * distinguish "threshold near 800"" from "threshold near 20"" under the
+ * logistic model (both predict near-certain success at 800"), so the
+ * posterior stays broad and the max-entropy candidate can land anywhere in
+ * range. Classic adaptive procedures (QUEST and step-limited staircases
+ * alike) cap step size for exactly this reason — an abrupt jump to an
+ * imperceptible disparity reads as "the test is broken," not as a
+ * measurement. Walking one level at a time still uses the Bayesian
+ * posterior to decide direction, it just can't skip levels.
+ */
+function neighborLevels(levels: number[], currentArcsec: number): number[] {
+  const idx = levels.indexOf(currentArcsec);
+  if (idx === -1) return levels;
+  return levels.slice(Math.max(0, idx - 1), Math.min(levels.length, idx + 2));
+}
+
 function pickTarget(): Position {
   return POSITIONS[Math.floor(Math.random() * POSITIONS.length)].value;
 }
@@ -114,7 +163,7 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
 
   const [posterior, setPosterior] = useState<StereoPosterior>(() => initStereoPosterior());
   const [currentArcsec, setCurrentArcsec] = useState<number>(() =>
-    selectNextStereoStimulus(initStereoPosterior(), canAdminister ? testableLevels : DISPARITY_LEVELS_ARCSEC),
+    canAdminister ? testableLevels[0] : DISPARITY_LEVELS_ARCSEC[0],
   );
   const [target, setTarget] = useState<Position>(pickTarget);
   const [trial, setTrial] = useState(0);
@@ -125,32 +174,46 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
   useEffect(() => {
     if (hasGlasses !== true || done || !canAdminister) return;
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
+    if (!canvas) return;
 
-    const disparityPx = arcSecToPx(currentArcsec);
+    // The canvas backing buffer must be scaled by the real device pixel
+    // ratio, not left at CANVAS_SIZE flat: otherwise the browser stretches a
+    // low-res buffer to fill a HiDPI screen's larger physical pixel area,
+    // discarding the fine sub-pixel gradients drawRDS's supersampling was
+    // built to preserve before they ever reach the display. CSS size stays
+    // fixed at CANVAS_SIZE (see the style prop) so the on-page layout is
+    // unaffected — only the drawing resolution goes up.
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = CANVAS_SIZE * dpr;
+    canvas.height = CANVAS_SIZE * dpr;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const disparityPx = arcSecToPx(currentArcsec) * dpr;
     const seed = trial + 1;
 
     const left = document.createElement('canvas');
-    left.width = CANVAS_SIZE;
-    left.height = CANVAS_SIZE;
+    left.width = CANVAS_SIZE * dpr;
+    left.height = CANVAS_SIZE * dpr;
     drawRDS(left.getContext('2d')!, {
       disparityPx,
-      targetRegionRadius: TARGET_REGION_RADIUS,
+      targetRegionRadius: TARGET_REGION_RADIUS * dpr,
       targetPosition: target,
       eye: 'left',
       seed,
+      dotRadiusPx: DOT_RADIUS_PX * dpr,
     });
 
     const right = document.createElement('canvas');
-    right.width = CANVAS_SIZE;
-    right.height = CANVAS_SIZE;
+    right.width = CANVAS_SIZE * dpr;
+    right.height = CANVAS_SIZE * dpr;
     drawRDS(right.getContext('2d')!, {
       disparityPx,
-      targetRegionRadius: TARGET_REGION_RADIUS,
+      targetRegionRadius: TARGET_REGION_RADIUS * dpr,
       targetPosition: target,
       eye: 'right',
       seed,
+      dotRadiusPx: DOT_RADIUS_PX * dpr,
     });
 
     // The RDS 'left'/'right' halves stand for what each anatomical eye
@@ -234,7 +297,11 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
 
     setPosterior(nextPosterior);
     setTrial(nextTrial);
-    setCurrentArcsec(selectNextStereoStimulus(nextPosterior, testableLevels));
+    setCurrentArcsec(
+      nextTrial < INITIAL_EASY_TRIALS
+        ? testableLevels[0]
+        : selectNextStereoStimulus(nextPosterior, neighborLevels(testableLevels, currentArcsec)),
+    );
     setTarget(pickTarget());
   }
 
@@ -386,8 +453,7 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
       </div>
       <canvas
         ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
+        style={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}
         className="mx-auto rounded border border-gray-200"
       />
       <p className="text-center text-sm text-gray-600">Where is the floating circle?</p>

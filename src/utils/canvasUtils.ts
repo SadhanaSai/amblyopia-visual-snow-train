@@ -388,15 +388,33 @@ export interface RDSOptions {
   eye: 'left' | 'right';
   /** Shared between left/right calls so both halves render the same base dot field. */
   seed?: number;
+  /**
+   * Dot element radius, in native canvas px. Julesz-style RDS design keeps
+   * the dot element small relative to the disparity being tested — once
+   * element size approaches or exceeds the disparity, per-dot correspondence
+   * becomes ambiguous and the target reads as a vague smear rather than a
+   * clean edge (Stevenson, Cormack & Schor, 1989, on RDS correspondence
+   * noise). Callers should scale this to the *current trial's* disparityPx
+   * rather than pass a fixed constant — see StereoTest.tsx.
+   */
+  dotRadiusPx: number;
 }
 
 function targetPositionToXY(
   pos: RDSOptions['targetPosition'],
   width: number,
   height: number,
+  targetRegionRadius: number,
+  disparityPx: number,
 ): { x: number; y: number } {
-  const marginX = width * 0.25;
-  const marginY = height * 0.25;
+  // The target circle must stay clear of the canvas edge even after the
+  // right eye's copy is shifted by disparityPx — otherwise dots near the
+  // region's edge exist in one eye's half but get clipped off the other's,
+  // producing a spurious one-sided color fringe at the border instead of a
+  // real depth cue. The shift is always applied in +x, so only the right
+  // edge is at risk, but margins are widened symmetrically for simplicity.
+  const marginX = Math.max(width * 0.25, targetRegionRadius + Math.abs(disparityPx) + 4);
+  const marginY = Math.max(height * 0.25, targetRegionRadius + 4);
   switch (pos) {
     case 'tl':
       return { x: marginX, y: marginY };
@@ -429,12 +447,12 @@ const RDS_SUPERSAMPLE = 4;
 function drawRDSAtScale(ctx: CanvasRenderingContext2D, opts: RDSOptions, scale: number): void {
   const { width, height } = ctx.canvas;
   const rand = mulberry32(opts.seed ?? 42);
-  const dotRadius = 2 * scale;
+  const dotRadius = opts.dotRadiusPx * scale;
   const density = 0.5;
   const cellSize = dotRadius * 2;
-  const target = targetPositionToXY(opts.targetPosition, width, height);
   const targetRegionRadius = opts.targetRegionRadius * scale;
   const disparityPx = opts.disparityPx * scale;
+  const target = targetPositionToXY(opts.targetPosition, width, height, targetRegionRadius, disparityPx);
 
   ctx.fillStyle = '#808080';
   ctx.fillRect(0, 0, width, height);
