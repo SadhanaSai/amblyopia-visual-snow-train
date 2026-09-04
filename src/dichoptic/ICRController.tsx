@@ -36,6 +36,10 @@ export default function ICRController() {
           {TREND_ARROWS[trend]}
         </div>
       </div>
+      <p className="mt-1 text-xs text-gray-500">
+        How much contrast your strong eye gets relative to your weak eye — higher means less of a
+        handicap for the strong eye.
+      </p>
 
       {trend === 'regressing' && (
         <p className="mt-2 text-xs text-amber-700">
