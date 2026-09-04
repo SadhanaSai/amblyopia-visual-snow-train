@@ -139,26 +139,32 @@ export default function CSFTest({ onComplete }: CSFTestProps) {
     [eye, eyeIndex, eyeOrder.length, completedResults, logCSF, logSession, profile.weakEye, onComplete],
   );
 
+  function handleChoice(choiceIdx: number) {
+    if ((phase !== 'stimulus' && phase !== 'response') || !stimulus) return;
+    const correct = choiceIdx === orientationIdx;
+    const nextPosterior = updateCSFPosterior(posterior, stimulus, correct);
+    setPosterior(nextPosterior);
+    const nextTrial = trial + 1;
+    setTrial(nextTrial);
+    if (nextTrial >= TOTAL_TRIALS) {
+      finishEye(nextPosterior);
+    } else {
+      startTrial(nextPosterior);
+    }
+  }
+
   // Respond to arrow-key presses from stimulus onset through the response
   // window — a 200ms flash is fast enough that a quick, attentive response
   // often lands before the phase flips to 'response'; gating strictly on
-  // 'response' silently dropped those presses.
+  // 'response' silently dropped those presses. Kept as an alternative to the
+  // click targets below for anyone who prefers the keyboard.
   useEffect(() => {
     if ((phase !== 'stimulus' && phase !== 'response') || !stimulus) return;
     function onKeyDown(e: KeyboardEvent) {
       const choiceIdx = ORIENTATION_OPTIONS.findIndex((o) => o.key === e.key);
       if (choiceIdx === -1) return;
       e.preventDefault();
-      const correct = choiceIdx === orientationIdx;
-      const nextPosterior = updateCSFPosterior(posterior, stimulus!, correct);
-      setPosterior(nextPosterior);
-      const nextTrial = trial + 1;
-      setTrial(nextTrial);
-      if (nextTrial >= TOTAL_TRIALS) {
-        finishEye(nextPosterior);
-      } else {
-        startTrial(nextPosterior);
-      }
+      handleChoice(choiceIdx);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -228,11 +234,19 @@ export default function CSFTest({ onComplete }: CSFTestProps) {
         className="mx-auto rounded border border-gray-200 bg-[#808080]"
       />
       <p className="text-center text-sm text-gray-600">
-        Which way was the pattern tilted? Press the matching arrow key.
+        Which way was the pattern tilted? Click the matching line.
       </p>
-      <div className="flex justify-center gap-4 text-lg text-gray-500">
-        {ORIENTATION_OPTIONS.map((o) => (
-          <span key={o.key}>{o.label}</span>
+      <div className="flex justify-center gap-3">
+        {ORIENTATION_OPTIONS.map((o, idx) => (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => handleChoice(idx)}
+            aria-label={`Tilted like ${o.glyph}`}
+            className="flex h-14 w-14 items-center justify-center rounded-lg border border-gray-300 text-2xl text-gray-700 active:bg-gray-100"
+          >
+            {o.glyph}
+          </button>
         ))}
       </div>
     </div>

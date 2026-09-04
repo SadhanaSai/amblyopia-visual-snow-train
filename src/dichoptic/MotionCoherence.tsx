@@ -4,6 +4,7 @@ import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useStaircase } from '../hooks/useStaircase';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
+import { useResponsiveSquareCanvas } from '../hooks/useResponsiveSquareCanvas';
 import {
   compositeAnaglyph,
   createRDK,
@@ -19,7 +20,6 @@ const SPEEDS = [3, 6, 12] as const;
 const DIRECTIONS = [0, 45, 90, 135, 180, 225, 270, 315];
 const MAX_TRIALS = 80;
 const VIEWING_MS = 1500;
-const CANVAS_SIZE = 320;
 const DOT_DENSITY_PER_DEG2 = 3;
 const FIELD_DIAMETER_DEG = 8;
 const DOT_RADIUS_PX = 2.5;
@@ -49,6 +49,7 @@ export default function MotionCoherence({ onComplete }: MotionCoherenceProps) {
   const adaptiveICR = useAdaptiveICR();
   const staircase = useStaircase(CONFIG);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { containerRef, size } = useResponsiveSquareCanvas();
   const rafRef = useRef<number | null>(null);
   const coherentStateRef = useRef<RDKState | null>(null);
   const noiseStateRef = useRef<RDKState | null>(null);
@@ -261,27 +262,56 @@ export default function MotionCoherence({ onComplete }: MotionCoherenceProps) {
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
-      <div className="text-xs text-gray-400">
-        Trial {trial + 1} / {MAX_TRIALS}
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
+      <div className="flex items-center justify-between text-xs text-gray-400">
+        <span>
+          Trial {trial + 1} / {MAX_TRIALS}
+        </span>
+        {trial > 0 && <span>{((correctCount / trial) * 100).toFixed(0)}% correct</span>}
       </div>
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
-        className="mx-auto rounded border border-gray-200 bg-black"
-      />
+      <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full bg-blue-600 transition-all"
+          style={{ width: `${(trial / MAX_TRIALS) * 100}%` }}
+        />
+      </div>
+      <div ref={containerRef} className="relative mx-auto aspect-square w-full">
+        <canvas
+          ref={canvasRef}
+          width={size}
+          height={size}
+          className="absolute inset-0 h-full w-full rounded border border-gray-200 bg-black"
+        />
+      </div>
       {phase === 'response' && (
         <div>
           <p className="mb-2 text-center text-sm text-gray-600">
-            Which direction did most dots move? Press 1–8.
+            Click the arrow pointing the way most dots moved.
           </p>
-          <div className="mx-auto grid max-w-xs grid-cols-4 gap-1 text-center text-xs text-gray-500">
-            {DIRECTIONS.map((d, i) => (
-              <div key={d}>
-                {i + 1}: {d}°
-              </div>
-            ))}
+          {/* Each button sits at its own compass position (same cos/sin
+              convention as the dots' own motion, since canvas y already
+              points down) and its arrow is rotated to match — so picking a
+              direction is "click the arrow that looked like that", not
+              "recall which number means 90°". Number keys 1-8 still work
+              too, in DIRECTIONS order, for anyone who prefers the keyboard. */}
+          <div className="relative mx-auto h-56 w-56">
+            {DIRECTIONS.map((d) => {
+              const rad = (d * Math.PI) / 180;
+              const leftPct = 50 + 38 * Math.cos(rad);
+              const topPct = 50 + 38 * Math.sin(rad);
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => respond(d)}
+                  aria-label={`Dots moved this way (${d}°)`}
+                  className="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-gray-300 bg-white text-xl text-gray-700 active:bg-gray-100"
+                  style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                >
+                  <span style={{ display: 'inline-block', transform: `rotate(${d}deg)` }}>➤</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
