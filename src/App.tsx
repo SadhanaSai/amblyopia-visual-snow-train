@@ -30,7 +30,9 @@ import AssessmentRouter from './assessment/AssessmentRouter';
 
 import ProgressDashboard from './progress/ProgressDashboard';
 import ExerciseIntro from './components/ExerciseIntro';
+import TodayProgress from './components/TodayProgress';
 import { EXERCISE_INFO } from './data/exerciseInfo';
+import { TRAINING_EXERCISES } from './data/trainingExercises';
 
 const CLINICAL_DISCLAIMER = `These exercises and measurements are based on published peer-reviewed research in vision science and neuro-optometry (2020-2025). They are not a substitute for clinical diagnosis or treatment by a licensed optometrist or ophthalmologist.
 
@@ -116,22 +118,29 @@ function TrackedExercise({
 
 type ExerciseComponent = ComponentType<{ onComplete?: () => void }>;
 
-const DICHOPTIC_EXERCISES: { key: string; label: string; Component: ExerciseComponent }[] = [
-  { key: 'grating-fusion', label: 'Contrast-Defined Grating Fusion', Component: GratingFusion },
-  { key: 'letter-discrimination', label: 'Letter / Optotype Discrimination', Component: LetterDiscrimination },
-  { key: 'rivalry-probe', label: 'Binocular Rivalry Suppression Probe', Component: RivalryProbe },
-  { key: 'motion-coherence', label: 'Dichoptic Global Motion Coherence', Component: MotionCoherence },
-  { key: 'dichoptic-reading', label: 'Dichoptic Reading', Component: DichopticReading },
-  { key: 'fixation-stability', label: 'Fixation Stability Training', Component: FixationStability },
-];
+const EXERCISE_COMPONENTS: Record<string, ExerciseComponent> = {
+  'grating-fusion': GratingFusion,
+  'letter-discrimination': LetterDiscrimination,
+  'rivalry-probe': RivalryProbe,
+  'motion-coherence': MotionCoherence,
+  'dichoptic-reading': DichopticReading,
+  'fixation-stability': FixationStability,
+  'noise-adaptation': NoiseAdaptation,
+  'saccadic-training': SaccadicTraining,
+  'vergence-training': VergenceTraining,
+  'entoptic-desensitization': EntopticDesensitization,
+  'chromatic-simulator': ChromaticSimulator,
+};
 
-const NOPT_EXERCISES: { key: string; label: string; Component: ExerciseComponent }[] = [
-  { key: 'noise-adaptation', label: 'Visual Noise Adaptation', Component: NoiseAdaptation },
-  { key: 'saccadic-training', label: 'Saccadic Training', Component: SaccadicTraining },
-  { key: 'vergence-training', label: 'Vergence + Accommodation Training', Component: VergenceTraining },
-  { key: 'entoptic-desensitization', label: 'Entoptic Desensitization', Component: EntopticDesensitization },
-  { key: 'chromatic-simulator', label: 'Chromatic Simulator', Component: ChromaticSimulator },
-];
+const DICHOPTIC_EXERCISES = TRAINING_EXERCISES.filter((e) => e.module === 'dichoptic').map((e) => ({
+  ...e,
+  Component: EXERCISE_COMPONENTS[e.key],
+}));
+
+const NOPT_EXERCISES = TRAINING_EXERCISES.filter((e) => e.module === 'nopt').map((e) => ({
+  ...e,
+  Component: EXERCISE_COMPONENTS[e.key],
+}));
 
 type Tab = 'train' | 'assess' | 'progress' | 'guide' | 'settings';
 const TABS: { key: Tab; label: string }[] = [
@@ -262,6 +271,8 @@ function TrainTab() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
+      <TodayProgress />
+
       <div className="flex gap-2">
         {(['dichoptic', 'nopt'] as const).map((m) => (
           <button

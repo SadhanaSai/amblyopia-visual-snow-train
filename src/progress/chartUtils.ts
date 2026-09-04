@@ -137,3 +137,27 @@ export function minutesByDay(sessions: { timestamp: string; durationSeconds: num
   }
   return map;
 }
+
+/** Consecutive-day count ending at `from` (default today) with any logged minutes. */
+export function computeStreak(minutesPerDay: Map<string, number>, from: Date = new Date()): number {
+  let count = 0;
+  const cursor = new Date(from);
+  for (;;) {
+    const key = dayKey(cursor);
+    if ((minutesPerDay.get(key) ?? 0) > 0) {
+      count++;
+      cursor.setDate(cursor.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return count;
+}
+
+/** "1h 05m" / "12m" — total duration rendered compactly for summary badges. */
+export function formatDurationCompact(seconds: number): string {
+  const totalMinutes = Math.round(seconds / 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return h > 0 ? `${h}h ${m.toString().padStart(2, '0')}m` : `${m}m`;
+}

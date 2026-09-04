@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Session } from '../types/session';
+import { labelForExercise } from '../data/trainingExercises';
 import { dayKey } from './chartUtils';
 
 const INCOMPLETE_NOTE = 'incomplete — exited before finishing';
@@ -79,7 +80,7 @@ export default function DailyTrainingLog({ sessions }: DailyTrainingLogProps) {
               {day.exercises.map((e) => (
                 <li key={e.exercise} className="flex items-center justify-between text-xs text-gray-500">
                   <span>
-                    {e.exercise}
+                    {labelForExercise(e.exercise)}
                     {e.partial && (
                       <span className="ml-1.5 rounded bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-700">
                         partial
