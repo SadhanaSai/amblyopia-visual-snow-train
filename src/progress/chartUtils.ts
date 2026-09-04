@@ -122,3 +122,18 @@ export function formatShortDate(iso: string): string {
   const d = new Date(iso);
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
+
+/** Calendar-day key (local ISO date) for grouping sessions by day. */
+export function dayKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/** Sums durationSeconds (as minutes) per calendar day, keyed by dayKey(). */
+export function minutesByDay(sessions: { timestamp: string; durationSeconds: number }[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const s of sessions) {
+    const key = dayKey(new Date(s.timestamp));
+    map.set(key, (map.get(key) ?? 0) + s.durationSeconds / 60);
+  }
+  return map;
+}

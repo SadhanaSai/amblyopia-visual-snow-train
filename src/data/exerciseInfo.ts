@@ -163,9 +163,10 @@ export const EXERCISE_INFO: Record<string, ExerciseInfo> = {
       'Put on your glasses.',
       'A circle is hidden somewhere in the dot pattern — only visible once your eyes fuse the image in 3D.',
       'Tap which quadrant it appears in (top-left, top-right, bottom-left, bottom-right).',
-      '20 trials; the disparity shrinks as you keep finding it correctly.',
+      "Just guess your best if you're not sure — that's expected and part of how the test works.",
+      'Adapts trial-by-trial and stops on its own (roughly 6-24 trials) once it has a confident reading, including stopping early if it detects you have no measurable stereopsis at all.',
     ],
-    duration: '~2-3 minutes',
+    duration: '~2-4 minutes',
   },
   suppression: {
     title: 'Suppression Assessment',

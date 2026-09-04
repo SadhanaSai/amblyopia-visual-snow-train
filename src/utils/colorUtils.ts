@@ -1,4 +1,4 @@
-import type { WeakEye } from '../types/profile';
+import { DEFAULT_LENS_TYPE, type LensType, type WeakEye } from '../types/profile';
 
 /**
  * ICR blending, dichoptic channel colors, anaglyph channel separation.
@@ -13,7 +13,18 @@ export function applyICR(baseColor: [number, number, number], icr: number): stri
 }
 
 const WEAK_EYE_RED: [number, number, number] = [255, 0, 0];
-const STRONG_EYE_CYAN: [number, number, number] = [0, 255, 255];
+
+// The "non-red" channel's base color has to match the physical lens or it
+// leaks/dims through the wrong eye instead of fully separating — red/cyan
+// and red/green are the two anaglyph standards this app supports.
+const STRONG_EYE_COLOR_BY_LENS: Record<LensType, [number, number, number]> = {
+  'red-cyan': [0, 255, 255],
+  'red-green': [0, 255, 0],
+};
+
+export function strongEyeBaseColor(lensType: LensType): [number, number, number] {
+  return STRONG_EYE_COLOR_BY_LENS[lensType];
+}
 
 /**
  * Weak eye always renders at full saturation; strong eye is ICR-blended
@@ -22,9 +33,10 @@ const STRONG_EYE_CYAN: [number, number, number] = [0, 255, 255];
 export function getDichopticColors(
   weakEye: WeakEye,
   icr: number,
+  lensType: LensType = DEFAULT_LENS_TYPE,
 ): { leftEyeColor: string; rightEyeColor: string } {
   const weakColor = `rgb(${WEAK_EYE_RED.join(', ')})`;
-  const strongColor = applyICR(STRONG_EYE_CYAN, icr);
+  const strongColor = applyICR(strongEyeBaseColor(lensType), icr);
   return weakEye === 'left'
     ? { leftEyeColor: weakColor, rightEyeColor: strongColor }
     : { leftEyeColor: strongColor, rightEyeColor: weakColor };

@@ -4,7 +4,7 @@ import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
 import { fixationStabilityApplicable } from '../types/profile';
-import { applyICR } from '../utils/colorUtils';
+import { applyICR, strongEyeBaseColor } from '../utils/colorUtils';
 import { compositeAnaglyph } from '../utils/canvasUtils';
 
 const RUNS = 4;
@@ -31,6 +31,7 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const applicable = fixationStabilityApplicable(profile.diagnosis);
+  const runStartedAtRef = useRef(performance.now());
   const [phase, setPhase] = useState<Phase>(applicable ? 'setup' : 'not-applicable');
   const [runIndex, setRunIndex] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(RUN_SECONDS);
@@ -73,7 +74,10 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
       }
 
       // Surround ring — strong eye, ICR contrast.
-      strongCtx.strokeStyle = applyICR([0, 255, 255], adaptiveICR.currentICR);
+      strongCtx.strokeStyle = applyICR(
+        strongEyeBaseColor(profile.lensType ?? 'red-cyan'),
+        adaptiveICR.currentICR,
+      );
       strongCtx.lineWidth = 2;
       strongCtx.beginPath();
       strongCtx.arc(cx, cy, 80, 0, Math.PI * 2);
@@ -81,7 +85,7 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
 
       compositeAnaglyph(weak, strong, ctx);
     },
-    [adaptiveICR.currentICR],
+    [adaptiveICR.currentICR, profile.lensType],
   );
 
   // Countdown timer for the active run.
@@ -142,6 +146,7 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
   }, [phase, drawStatic, pxPerDeg]);
 
   function startRun() {
+    runStartedAtRef.current = performance.now();
     setSecondsLeft(RUN_SECONDS);
     setPhase('running');
   }
@@ -154,7 +159,7 @@ export default function FixationStability({ onComplete }: FixationStabilityProps
       exercise: 'FixationStability',
       displayMode: 'anaglyph',
       weakEye: profile.weakEye,
-      durationSeconds: RUN_SECONDS,
+      durationSeconds: Math.round((performance.now() - runStartedAtRef.current) / 1000),
       trials: 1,
       icrUsed: adaptiveICR.currentICR,
       selfRating: { pre: 0, post: rating },

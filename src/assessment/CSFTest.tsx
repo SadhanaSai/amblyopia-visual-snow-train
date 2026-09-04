@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useProfile } from '../profile/ProfileContext';
 import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { drawSinusoidalGrating } from '../utils/canvasUtils';
@@ -32,9 +33,11 @@ interface CSFTestProps {
 }
 
 export default function CSFTest({ onComplete }: CSFTestProps) {
+  const { profile } = useProfile();
   const { degToPx } = useViewingCalibration();
-  const { logCSF } = useSessionLogger();
+  const { logCSF, logSession } = useSessionLogger();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const eyeStartedAtRef = useRef(performance.now());
 
   const eyeOrder: TestedEye[] = ['weak', 'strong'];
   const [eyeIndex, setEyeIndex] = useState(0);
@@ -106,12 +109,25 @@ export default function CSFTest({ onComplete }: CSFTestProps) {
         AULCSF,
       };
       logCSF(result);
+      logSession({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        module: 'assessment',
+        exercise: 'CSFTest',
+        weakEye: profile.weakEye,
+        durationSeconds: Math.round((performance.now() - eyeStartedAtRef.current) / 1000),
+        trials: TOTAL_TRIALS,
+        staircaseThreshold: AULCSF,
+        thresholdUnit: 'AULCSF',
+        notes: `eye=${eye}`,
+      });
       const allResults = [...completedResults, result];
       setCompletedResults(allResults);
 
       if (eyeIndex + 1 >= eyeOrder.length) {
+        // onComplete is deferred to the "Done" button on the complete
+        // screen, not called here — see VATest.tsx for why.
         setPhase('complete');
-        onComplete?.();
       } else {
         setEyeIndex(eyeIndex + 1);
         setCoverConfirmed(false);
@@ -120,7 +136,7 @@ export default function CSFTest({ onComplete }: CSFTestProps) {
         setPhase('cover-check');
       }
     },
-    [eye, eyeIndex, eyeOrder.length, completedResults, logCSF, onComplete],
+    [eye, eyeIndex, eyeOrder.length, completedResults, logCSF, logSession, profile.weakEye, onComplete],
   );
 
   // Respond to arrow-key presses from stimulus onset through the response
@@ -166,7 +182,10 @@ export default function CSFTest({ onComplete }: CSFTestProps) {
         <button
           type="button"
           disabled={!coverConfirmed}
-          onClick={() => startTrial(posterior)}
+          onClick={() => {
+            eyeStartedAtRef.current = performance.now();
+            startTrial(posterior);
+          }}
           className="rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-40"
         >
           Start
@@ -185,6 +204,13 @@ export default function CSFTest({ onComplete }: CSFTestProps) {
             <div className="text-xs text-gray-500">AULCSF: {r.AULCSF.toFixed(2)}</div>
           </div>
         ))}
+        <button
+          type="button"
+          onClick={() => onComplete?.()}
+          className="mt-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
+        >
+          Done
+        </button>
       </div>
     );
   }

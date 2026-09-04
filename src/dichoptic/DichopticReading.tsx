@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useProfile } from '../profile/ProfileContext';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
-import { renderDichopticText } from '../utils/canvasUtils';
-import { applyICR } from '../utils/colorUtils';
+import { compositeAnaglyph, renderDichopticText } from '../utils/canvasUtils';
+import { strongEyeBaseColor } from '../utils/colorUtils';
 import { READING_CORPUS, type ReadingPassage } from '../data/readingCorpus';
 
 const HISTORY_KEY = 'reading_history';
@@ -13,7 +13,23 @@ const CANVAS_HEIGHT = 420;
 const MAX_LINE_WIDTH = 680;
 const FONT_SIZE = 20;
 const LINE_HEIGHT = 36;
-const MIN_READING_ICR = 0.2; // spec: ICR range for reading is 0.2-1.0, tighter than training's 0.1
+// spec named 0.2 as the reading floor (vs training's 0.1), but that number
+// was tuned for blending toward a *white* backdrop, where it worked out to
+// only ~6% perceived luminance contrast against the page — essentially
+// invisible, worse once real anaglyph glasses (imperfect channel
+// separation, real light loss) dim it further. Text now renders on black
+// (see the effect below), where contrast reduction means "dimmer" rather
+// than "paler," but the floor still needs to be well above the letter of
+// the old number to stay legible through actual glasses rather than a
+// theoretical perfect filter.
+const MIN_READING_ICR = 0.5;
+
+/** Scales a color's brightness toward black by `icr` (1 = full brightness). */
+function blendTowardBlack([r, g, b]: [number, number, number], icr: number): string {
+  const clamped = Math.min(1, Math.max(0, icr));
+  const scale = (c: number) => Math.round(c * clamped);
+  return `rgb(${scale(r)}, ${scale(g)}, ${scale(b)})`;
+}
 
 type AlternationMode = 'word' | 'line' | 'phrase';
 
@@ -57,8 +73,9 @@ interface DichopticReadingProps {
 }
 
 export default function DichopticReading({ onComplete }: DichopticReadingProps) {
-  const { profile } = useProfile();
+  const { profile, updateProfile } = useProfile();
   const { logSession } = useSessionLogger();
+  const lensType = profile.lensType ?? 'red-cyan';
   const adaptiveICR = useAdaptiveICR();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -77,18 +94,36 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    renderDichopticText(ctx, passage.text, {
+
+    // Render each eye's words onto its own transparent offscreen canvas,
+    // then combine with compositeAnaglyph() onto a black backdrop — the
+    // same technique GratingFusion/LetterDiscrimination/FixationStability
+    // use. Drawing straight onto a white canvas (the old approach) meant a
+    // "blocked" word never truly disappeared through the wrong lens (it
+    // showed as a dark shape on the lens-tinted white page) and the
+    // "passed" word's contrast was crushed by blending toward that same
+    // white. Both eyes' passes share identical layout options (only
+    // `onlyEye` differs) so word positions line up pixel-for-pixel.
+    const weak = document.createElement('canvas');
+    weak.width = canvas.width;
+    weak.height = canvas.height;
+    const strong = document.createElement('canvas');
+    strong.width = canvas.width;
+    strong.height = canvas.height;
+
+    const textOpts = {
       mode,
       weakEyeColor: '#FF0000',
-      strongEyeColor: applyICR([0, 255, 255], readingIcr),
+      strongEyeColor: blendTowardBlack(strongEyeBaseColor(lensType), readingIcr),
       canvasWidth: MAX_LINE_WIDTH,
       lineHeight: LINE_HEIGHT,
       fontSize: FONT_SIZE,
       fontFamily: 'Georgia, serif',
-    });
-  }, [phase, passage, mode, readingIcr]);
+    };
+    renderDichopticText(weak.getContext('2d')!, passage.text, { ...textOpts, onlyEye: 'weak' });
+    renderDichopticText(strong.getContext('2d')!, passage.text, { ...textOpts, onlyEye: 'strong' });
+    compositeAnaglyph(weak, strong, ctx);
+  }, [phase, passage, mode, readingIcr, lensType]);
 
   function startPassage() {
     const next = pickPassage();
@@ -133,16 +168,34 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
     return (
       <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
         <h2 className="text-lg font-semibold">Dichoptic Reading — glasses check</h2>
-        <div className="flex h-40 overflow-hidden rounded border border-gray-200">
-          <div className="flex flex-1 items-center justify-center bg-white text-2xl font-bold text-[#FF0000]">
+        {/* Black backdrop, not white: on white, a lens's blocked color still
+            shows as a dark shape against the lens-tinted page instead of
+            truly disappearing, and the passed color's contrast gets crushed
+            toward the same white. Black is what makes each channel either
+            fully vanish or read at full brightness through the matching
+            lens — the same reason the actual passage below renders through
+            compositeAnaglyph() instead of drawing straight onto white. */}
+        <div className="flex h-40 overflow-hidden rounded border border-gray-200 bg-black">
+          <div className="flex flex-1 items-center justify-center text-xl font-bold text-[#FF0000]">
             RED
           </div>
-          <div className="flex flex-1 items-center justify-center bg-white text-2xl font-bold text-[#00FFFF]">
+          <div className="flex flex-1 items-center justify-center text-xl font-bold text-[#00FF00]">
+            GREEN
+          </div>
+          <div className="flex flex-1 items-center justify-center text-xl font-bold text-[#00FFFF]">
             CYAN
           </div>
         </div>
         <p className="text-sm text-gray-600">
-          With glasses on — can you see RED but not CYAN with your weak eye?
+          With glasses on — can you see RED but not GREEN or CYAN with your weak eye, and GREEN
+          and CYAN but not RED with your other eye?
+        </p>
+        <p className="text-xs text-gray-500">
+          This app is built for <strong>red/cyan</strong> glasses. If GREEN comes through clearly
+          but CYAN looks noticeably dimmer or grayer through the same (non-red) lens, your lens is
+          closer to pure green than cyan — a different anaglyph standard the app doesn't render
+          for, which will always look washed out and leaky here no matter how strong the colors
+          are, regardless of what's on screen.
         </p>
         <div className="flex gap-2">
           <button
@@ -223,7 +276,7 @@ export default function DichopticReading({ onComplete }: DichopticReadingProps) 
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="mx-auto w-full max-w-2xl rounded border border-gray-200 bg-white"
+          className="mx-auto w-full max-w-2xl rounded border border-gray-200 bg-black"
           onClick={finishReading}
         />
         <button

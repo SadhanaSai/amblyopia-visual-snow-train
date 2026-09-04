@@ -13,7 +13,7 @@ export interface GratingOptions {
   orientation: number; // degrees
   phase: number; // radians
   apertureSigmaPx: number; // Gaussian window sigma
-  color: 'luminance' | 'red' | 'cyan';
+  color: 'luminance' | 'red' | 'cyan' | 'green';
   pxPerDeg: number;
   centerX?: number;
   centerY?: number;
@@ -60,6 +60,10 @@ export function drawSinusoidalGrating(ctx: CanvasRenderingContext2D, opts: Grati
         imageData.data[idx] = 0;
         imageData.data[idx + 1] = gray;
         imageData.data[idx + 2] = gray;
+      } else if (opts.color === 'green') {
+        imageData.data[idx] = 0;
+        imageData.data[idx + 1] = gray;
+        imageData.data[idx + 2] = 0;
       } else {
         imageData.data[idx] = gray;
         imageData.data[idx + 1] = gray;
@@ -83,6 +87,8 @@ export interface RDKConfig {
   dotRadiusPx: number;
   eye: 'weak' | 'strong' | 'both';
   icr: number;
+  /** Non-red anaglyph channel color for the 'strong' eye — must match the physical lens. Defaults to 'cyan'. */
+  strongEyeColor?: 'cyan' | 'green';
 }
 
 interface RDKDot {
@@ -151,8 +157,12 @@ export function drawRDK(
   // 'weak'/'strong' route dots into the matching anaglyph channel so this
   // layer can be composited via compositeAnaglyph(); 'both' renders a plain
   // luminance layer for side-by-side/screen-only display modes.
-  const colorMode: 'red' | 'cyan' | 'luminance' =
-    state.config.eye === 'weak' ? 'red' : state.config.eye === 'strong' ? 'cyan' : 'luminance';
+  const colorMode: 'red' | 'cyan' | 'green' | 'luminance' =
+    state.config.eye === 'weak'
+      ? 'red'
+      : state.config.eye === 'strong'
+        ? (state.config.strongEyeColor ?? 'cyan')
+        : 'luminance';
 
   for (const dot of state.dots) {
     const alpha = dot.coherent ? 1 : state.config.icr;
@@ -161,7 +171,9 @@ export function drawRDK(
         ? `rgba(255, 0, 0, ${alpha})`
         : colorMode === 'cyan'
           ? `rgba(0, 255, 255, ${alpha})`
-          : `rgba(255, 255, 255, ${alpha})`;
+          : colorMode === 'green'
+            ? `rgba(0, 255, 0, ${alpha})`
+            : `rgba(255, 255, 255, ${alpha})`;
     ctx.fillStyle = fill;
     ctx.beginPath();
     ctx.arc(cx + dot.x, cy + dot.y, state.config.dotRadiusPx, 0, Math.PI * 2);
@@ -237,6 +249,13 @@ export interface DichopticTextOptions {
   fontFamily: string;
   startX?: number;
   startY?: number;
+  /**
+   * Draw only this eye's words (the other positions are skipped, not
+   * filled) while still advancing the layout for every word. Call once per
+   * eye onto separate offscreen canvases with identical opts so both
+   * layers line up pixel-for-pixel, then combine with compositeAnaglyph().
+   */
+  onlyEye?: 'weak' | 'strong';
 }
 
 export function renderDichopticText(
@@ -271,20 +290,22 @@ export function renderDichopticText(
       lineIndex++;
       wordsOnLine = 0;
     }
-    const color =
+    const eye: 'weak' | 'strong' =
       opts.mode === 'word'
         ? i % 2 === 0
-          ? opts.weakEyeColor
-          : opts.strongEyeColor
+          ? 'weak'
+          : 'strong'
         : opts.mode === 'line'
           ? lineIndex % 2 === 0
-            ? opts.weakEyeColor
-            : opts.strongEyeColor
+            ? 'weak'
+            : 'strong'
           : phraseIndices[i] % 2 === 0
-            ? opts.weakEyeColor
-            : opts.strongEyeColor;
-    ctx.fillStyle = color;
-    ctx.fillText(word, x, y);
+            ? 'weak'
+            : 'strong';
+    if (!opts.onlyEye || opts.onlyEye === eye) {
+      ctx.fillStyle = eye === 'weak' ? opts.weakEyeColor : opts.strongEyeColor;
+      ctx.fillText(word, x, y);
+    }
     x += wordWidth + spaceWidth;
     wordsOnLine++;
   });

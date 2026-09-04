@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { ProfileProvider, useProfile } from './profile/ProfileContext';
 import ProfileSettings from './profile/ProfileSettings';
 import OnboardingWizard from './onboarding/OnboardingWizard';
@@ -6,6 +6,8 @@ import CalibrationWizard from './calibration/CalibrationWizard';
 import { loadProfile } from './utils/profileUtils';
 import { useSessionLogger } from './hooks/useSessionLogger';
 import { useViewingCalibration } from './hooks/useViewingCalibration';
+import type { Module } from './types/exercise';
+import type { WeakEye } from './types/profile';
 
 import ICRController from './dichoptic/ICRController';
 import GratingFusion from './dichoptic/GratingFusion';
@@ -46,6 +48,70 @@ function ClinicalDisclaimer({ variant }: { variant: 'header' | 'footer' }) {
       {CLINICAL_DISCLAIMER}
     </div>
   );
+}
+
+// Measures real wall-clock time spent on an exercise/assessment and
+// guarantees a Session gets logged even if the user leaves via the "Back"
+// button instead of letting the activity run to its own completion (which
+// already logs a detailed Session itself, via `onComplete`). Without this,
+// an abandoned attempt left no trace at all.
+//
+// A few exercises (FixationStability's runs, NoiseAdaptation's rounds,
+// CSFTest's per-eye passes, SaccadicTraining's Pursuit) log a Session after
+// each of several internal rounds while staying mounted for the rest.
+// Bailing out mid-way through a later round would otherwise double-count:
+// the fallback below would span the whole mount-to-unmount time, which
+// overlaps whatever earlier rounds already logged accurately. Skipping the
+// fallback whenever the shared session log has grown at all during this
+// mount (`sessions.length` moved past its value at mount) avoids that at
+// the cost of not logging the final, abandoned partial round by itself —
+// a better trade than inflating the day's total.
+function TrackedExercise({
+  module,
+  exercise,
+  weakEye,
+  onComplete,
+  children,
+}: {
+  module: Module;
+  exercise: string;
+  weakEye: WeakEye;
+  onComplete?: () => void;
+  children: (onComplete: () => void) => ReactNode;
+}) {
+  const { logSession, sessions } = useSessionLogger();
+  const mountedAtRef = useRef(performance.now());
+  const completedRef = useRef(false);
+  const sessionCountAtMountRef = useRef(sessions.length);
+  const latestSessionCountRef = useRef(sessions.length);
+  latestSessionCountRef.current = sessions.length;
+
+  useEffect(() => {
+    return () => {
+      if (completedRef.current) return;
+      if (latestSessionCountRef.current > sessionCountAtMountRef.current) return;
+      const durationSeconds = Math.round((performance.now() - mountedAtRef.current) / 1000);
+      if (durationSeconds < 1) return;
+      logSession({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        module,
+        exercise,
+        weakEye,
+        durationSeconds,
+        trials: 0,
+        notes: 'incomplete — exited before finishing',
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleComplete() {
+    completedRef.current = true;
+    onComplete?.();
+  }
+
+  return <>{children(handleComplete)}</>;
 }
 
 type ExerciseComponent = ComponentType<{ onComplete?: () => void }>;
@@ -157,7 +223,14 @@ function TrainTab() {
         <button type="button" onClick={closeExercise} className="self-start text-xs text-blue-600">
           &larr; Back
         </button>
-        <ActiveComponent onComplete={closeExercise} />
+        <TrackedExercise
+          module={module}
+          exercise={active.key}
+          weakEye={profile.weakEye}
+          onComplete={closeExercise}
+        >
+          {(onComplete) => <ActiveComponent onComplete={onComplete} />}
+        </TrackedExercise>
       </div>
     );
   }
@@ -225,6 +298,7 @@ function TrainTab() {
 // --- Assess tab --------------------------------------------------------
 
 function AssessTab() {
+  const { profile } = useProfile();
   const { vaResults, csfResults, stereoResults, suppressionResults } = useSessionLogger();
   const [activeTest, setActiveTest] = useState<'va' | 'csf' | 'stereo' | 'suppression' | null>(null);
   const [introSeen, setIntroSeen] = useState(false);
@@ -250,10 +324,21 @@ function AssessTab() {
         <button type="button" onClick={closeTest} className="self-start text-xs text-blue-600">
           &larr; Back
         </button>
-        {activeTest === 'va' && <VATest onComplete={closeTest} />}
-        {activeTest === 'csf' && <CSFTest onComplete={closeTest} />}
-        {activeTest === 'stereo' && <StereoTest onComplete={closeTest} />}
-        {activeTest === 'suppression' && <RivalryProbe mode="assessment" onComplete={closeTest} />}
+        <TrackedExercise
+          module="assessment"
+          exercise={activeTest}
+          weakEye={profile.weakEye}
+          onComplete={closeTest}
+        >
+          {(onComplete) => (
+            <>
+              {activeTest === 'va' && <VATest onComplete={onComplete} />}
+              {activeTest === 'csf' && <CSFTest onComplete={onComplete} />}
+              {activeTest === 'stereo' && <StereoTest onComplete={onComplete} />}
+              {activeTest === 'suppression' && <RivalryProbe mode="assessment" onComplete={onComplete} />}
+            </>
+          )}
+        </TrackedExercise>
       </div>
     );
   }

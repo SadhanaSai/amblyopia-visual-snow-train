@@ -53,6 +53,7 @@ export default function MotionCoherence({ onComplete }: MotionCoherenceProps) {
   const noiseStateRef = useRef<RDKState | null>(null);
   const lastFrameTimeRef = useRef(0);
 
+  const startedAtRef = useRef(performance.now());
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(6);
   const [phase, setPhase] = useState<Phase>('setup');
   const [direction, setDirection] = useState(0);
@@ -103,14 +104,19 @@ export default function MotionCoherence({ onComplete }: MotionCoherenceProps) {
     const weakCtx = weak.getContext('2d')!;
     const strongCtx = strong.getContext('2d')!;
 
+    const strongEyeColor = profile.lensType === 'red-green' ? 'green' : 'cyan';
+
     // Coherent (signal) dots: weak eye only, full contrast.
     drawRDK(weakCtx, coherentStateRef.current);
     // Noise dots: identical field drawn into both eyes at ICR-blended contrast.
     drawRDK(weakCtx, { ...noiseStateRef.current, config: { ...noiseStateRef.current.config, eye: 'weak' } });
-    drawRDK(strongCtx, { ...noiseStateRef.current, config: { ...noiseStateRef.current.config, eye: 'strong' } });
+    drawRDK(strongCtx, {
+      ...noiseStateRef.current,
+      config: { ...noiseStateRef.current.config, eye: 'strong', strongEyeColor },
+    });
 
     compositeAnaglyph(weak, strong, ctx);
-  }, []);
+  }, [profile.lensType]);
 
   const startTrial = useCallback(() => {
     const dir = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
@@ -166,7 +172,7 @@ export default function MotionCoherence({ onComplete }: MotionCoherenceProps) {
       exercise: 'MotionCoherence',
       displayMode: 'anaglyph',
       weakEye: profile.weakEye,
-      durationSeconds: Math.round(finalTrial * (VIEWING_MS / 1000 + 2)),
+      durationSeconds: Math.round((performance.now() - startedAtRef.current) / 1000),
       trials: finalTrial,
       accuracy: finalCorrect / Math.max(1, finalTrial),
       staircaseThreshold: threshold,
@@ -229,7 +235,10 @@ export default function MotionCoherence({ onComplete }: MotionCoherenceProps) {
         </div>
         <button
           type="button"
-          onClick={startTrial}
+          onClick={() => {
+            startedAtRef.current = performance.now();
+            startTrial();
+          }}
           className="rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
         >
           Start

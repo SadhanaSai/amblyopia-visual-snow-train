@@ -39,6 +39,7 @@ export default function GratingFusion({ onComplete }: GratingFusionProps) {
   const [phase, setPhase] = useState<Phase>('setup');
   const [trial, setTrial] = useState(0);
   const [fusionCount, setFusionCount] = useState(0);
+  const startedAtRef = useRef(performance.now());
 
   const [config] = useState<StaircaseConfig>(() => ({
     type: '2down1up',
@@ -81,12 +82,12 @@ export default function GratingFusion({ onComplete }: GratingFusionProps) {
         orientation: 0,
         phase: flipped ? Math.PI : 0,
         apertureSigmaPx,
-        color: 'cyan',
+        color: profile.lensType === 'red-green' ? 'green' : 'cyan',
         pxPerDeg,
       });
       compositeAnaglyph(weak, strong, ctx);
     },
-    [spatialFrequency, apertureSigmaPx, pxPerDeg, staircase.currentValue],
+    [spatialFrequency, apertureSigmaPx, pxPerDeg, staircase.currentValue, profile.lensType],
   );
 
   const handleResponse = useCallback(
@@ -107,7 +108,7 @@ export default function GratingFusion({ onComplete }: GratingFusionProps) {
           exercise: 'GratingFusion',
           displayMode: 'anaglyph',
           weakEye: profile.weakEye,
-          durationSeconds: Math.round(nextTrial * ((STIMULUS_MS + ISI_MS + RESPONSE_MS) / 1000)),
+          durationSeconds: Math.round((performance.now() - startedAtRef.current) / 1000),
           trials: nextTrial,
           accuracy: nextFusionCount / nextTrial,
           staircaseThreshold: threshold,
@@ -232,7 +233,10 @@ export default function GratingFusion({ onComplete }: GratingFusionProps) {
         </div>
         <button
           type="button"
-          onClick={() => setPhase('stimulus')}
+          onClick={() => {
+            startedAtRef.current = performance.now();
+            setPhase('stimulus');
+          }}
           className="rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
         >
           Start (put on your glasses)

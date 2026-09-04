@@ -23,6 +23,13 @@ export interface StereoResult {
   date: string;
   thresholdArcsec: number;
   logThreshold: number;
+  /** True when the test stopped early because the posterior concluded the
+   * participant can't reliably discriminate even the largest tested
+   * disparity, rather than because a real threshold converged. When true,
+   * thresholdArcsec is the largest tested disparity (a floor, not a fit). */
+  noMeasurableStereopsis?: boolean;
+  /** Posterior mean lapse rate from the fitted psychometric function. */
+  lapseRate?: number;
 }
 
 export interface SuppressionResult {

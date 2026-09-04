@@ -4,9 +4,10 @@ import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useStaircase } from '../hooks/useStaircase';
 import { useAdaptiveICR } from '../hooks/useAdaptiveICR';
-import { applyICR } from '../utils/colorUtils';
+import { applyICR, strongEyeBaseColor } from '../utils/colorUtils';
 import { compositeAnaglyph, drawSloanLetter, SLOAN_LETTERS } from '../utils/canvasUtils';
 import type { StaircaseConfig } from '../types/staircase';
+import type { LensType } from '../types/profile';
 
 type Paradigm = 'flanked' | 'contrast' | 'vernier';
 
@@ -23,10 +24,15 @@ function randomLetter(): string {
   return SLOAN_LETTERS[Math.floor(Math.random() * SLOAN_LETTERS.length)];
 }
 
-function drawBlankStrongField(ctx: CanvasRenderingContext2D, radiusPx: number, icr: number): void {
+function drawBlankStrongField(
+  ctx: CanvasRenderingContext2D,
+  radiusPx: number,
+  icr: number,
+  lensType: LensType,
+): void {
   const { width, height } = ctx.canvas;
   ctx.save();
-  ctx.fillStyle = applyICR([0, 255, 255], icr);
+  ctx.fillStyle = applyICR(strongEyeBaseColor(lensType), icr);
   ctx.beginPath();
   ctx.arc(width / 2, height / 2, radiusPx, 0, Math.PI * 2);
   ctx.fill();
@@ -82,6 +88,7 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
   const adaptiveICR = useAdaptiveICR();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const startedAtRef = useRef(performance.now());
   const [paradigm, setParadigm] = useState<Paradigm | null>(null);
   const [config, setConfig] = useState<StaircaseConfig | null>(null);
   const staircase = useStaircase(config ?? configFor('flanked'));
@@ -117,7 +124,7 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
       drawSloanLetter(weakCtx, target, { centerX: cx - spacingPx, centerY: cy, sizePx, color: '#FF0000' });
       drawSloanLetter(weakCtx, target, { centerX: cx + spacingPx, centerY: cy, sizePx, color: '#FF0000' });
       drawSloanLetter(weakCtx, target, { centerX: cx, centerY: cy, sizePx, color: '#FF0000' });
-      drawBlankStrongField(strongCtx, sizePx * 2, strongEyeIcr);
+      drawBlankStrongField(strongCtx, sizePx * 2, strongEyeIcr, profile.lensType ?? 'red-cyan');
     } else if (paradigm === 'contrast') {
       const sizePx = Math.max(12, degToPx(0.5));
       const gray = Math.round(255 * (1 - staircase.currentValue));
@@ -127,7 +134,7 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
         sizePx,
         color: `rgb(${gray}, 0, 0)`,
       });
-      drawBlankStrongField(strongCtx, sizePx * 1.5, strongEyeIcr);
+      drawBlankStrongField(strongCtx, sizePx * 1.5, strongEyeIcr, profile.lensType ?? 'red-cyan');
     } else {
       const offsetPx = arcSecToPx(staircase.currentValue) * (vernierDirection === 'left' ? -1 : 1);
       const cx = canvas.width / 2;
@@ -140,11 +147,11 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
       weakCtx.moveTo(cx, cy + 4);
       weakCtx.lineTo(cx, cy + 30);
       weakCtx.stroke();
-      drawBlankStrongField(strongCtx, 40, strongEyeIcr);
+      drawBlankStrongField(strongCtx, 40, strongEyeIcr, profile.lensType ?? 'red-cyan');
     }
 
     compositeAnaglyph(weak, strong, ctx);
-  }, [paradigm, target, staircase.currentValue, vernierDirection, degToPx, arcSecToPx, strongEyeIcr]);
+  }, [paradigm, target, staircase.currentValue, vernierDirection, degToPx, arcSecToPx, strongEyeIcr, profile.lensType]);
 
   useEffect(() => {
     if (paradigm) drawTrial();
@@ -168,7 +175,7 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
       paradigm: paradigm ?? undefined,
       displayMode: 'anaglyph',
       weakEye: profile.weakEye,
-      durationSeconds: finalTrial * 4,
+      durationSeconds: Math.round((performance.now() - startedAtRef.current) / 1000),
       trials: finalTrial,
       accuracy: finalCorrect / Math.max(1, finalTrial),
       staircaseThreshold: threshold,
@@ -200,6 +207,7 @@ export default function LetterDiscrimination({ onComplete }: LetterDiscriminatio
   }
 
   function startParadigm(p: Paradigm) {
+    startedAtRef.current = performance.now();
     setParadigm(p);
     setConfig(configFor(p));
     setTrial(0);

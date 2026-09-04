@@ -1,4 +1,4 @@
-import type { UserProfile } from '../types/profile';
+import { DEFAULT_LENS_TYPE, type UserProfile } from '../types/profile';
 
 const STORAGE_KEY = 'profile';
 
@@ -25,6 +25,7 @@ export function createDefaultProfile(): UserProfile {
     onboardingComplete: false,
     calibration: null,
     createdAt: new Date().toISOString(),
+    lensType: DEFAULT_LENS_TYPE,
   };
 }
 

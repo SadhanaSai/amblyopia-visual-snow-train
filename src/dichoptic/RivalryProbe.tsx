@@ -68,7 +68,7 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
         orientation: 0,
         phase: 0,
         apertureSigmaPx,
-        color: 'cyan',
+        color: profile.lensType === 'red-green' ? 'green' : 'cyan',
         pxPerDeg,
       });
       const weak = document.createElement('canvas');
@@ -87,7 +87,7 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
       }
       compositeAnaglyph(weak, strong, ctx);
     },
-    [apertureSigmaPx, pxPerDeg],
+    [apertureSigmaPx, pxPerDeg, profile.lensType],
   );
 
   function finish() {
@@ -98,7 +98,7 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
     logSession({
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      module: 'dichoptic',
+      module: mode === 'assessment' ? 'assessment' : 'dichoptic',
       exercise: 'RivalryProbe',
       displayMode: 'anaglyph',
       weakEye: profile.weakEye,
@@ -109,7 +109,8 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
       thresholdUnit: 'Michelson contrast',
       notes: `mode=${mode} falseAlarms=${falseAlarms}`,
     });
-    onComplete?.();
+    // onComplete is deferred to the "Done" button on the complete screen,
+    // not called here — see VATest.tsx for why.
   }
 
   useEffect(() => {
@@ -200,6 +201,13 @@ export default function RivalryProbe({ mode = 'training', onComplete }: RivalryP
         <p className="text-xs text-gray-400">
           Hits {hits} · Misses {misses} · False alarms {falseAlarms}
         </p>
+        <button
+          type="button"
+          onClick={() => onComplete?.()}
+          className="mt-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
+        >
+          Done
+        </button>
       </div>
     );
   }

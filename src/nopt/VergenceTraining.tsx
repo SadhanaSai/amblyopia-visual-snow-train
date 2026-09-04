@@ -63,6 +63,7 @@ function ConvergencePushup({
 }) {
   const [difficulty, setDifficulty] = useState(20); // 1-100 normalized
   const [done, setDone] = useState(false);
+  const startedAtRef = useRef(performance.now());
   const maxSeparationPx = 220;
   const separationPx = maxSeparationPx * (1 - difficulty / 100) + 20;
 
@@ -78,7 +79,7 @@ function ConvergencePushup({
       exercise: 'VergenceTraining',
       paradigm: 'convergence',
       weakEye,
-      durationSeconds: 0,
+      durationSeconds: Math.round((performance.now() - startedAtRef.current) / 1000),
       trials: 1,
       staircaseThreshold: difficulty,
       thresholdUnit: 'normalized breakpoint (1-100)',
@@ -178,7 +179,7 @@ function AccommodativeRock({
       exercise: 'VergenceTraining',
       paradigm: 'accommodativeRock',
       weakEye,
-      durationSeconds: ROCK_DURATION_S,
+      durationSeconds: Math.round((performance.now() - startedAtRef.current) / 1000),
       trials: toggleRts.length,
       staircaseThreshold: meanRt,
       thresholdUnit: meanRt !== undefined ? 'ms mean toggle RT' : undefined,
@@ -299,7 +300,7 @@ function NoiseStability({
       exercise: 'VergenceTraining',
       paradigm: 'noiseStability',
       weakEye,
-      durationSeconds: STABILITY_DURATION_S,
+      durationSeconds: Math.round((performance.now() - startRef.current) / 1000),
       trials: 1,
     });
     onComplete?.();

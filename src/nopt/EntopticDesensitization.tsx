@@ -80,6 +80,7 @@ function BlueField({
   const [preRating, setPreRating] = useState(5);
   const [postRating, setPostRating] = useState(5);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const startedAtRef = useRef(performance.now());
 
   const durationS = Math.min(
     BLUE_FIELD_MAX_S,
@@ -112,7 +113,7 @@ function BlueField({
       exercise: 'EntopticDesensitization',
       paradigm: 'blueField',
       weakEye,
-      durationSeconds: durationS,
+      durationSeconds: Math.round((performance.now() - startedAtRef.current) / 1000),
       trials: 1,
       selfRating: { pre: preRating, post: postRating },
     });
@@ -128,7 +129,10 @@ function BlueField({
         <RatingSlider value={preRating} onChange={setPreRating} />
         <button
           type="button"
-          onClick={() => setPhase('running')}
+          onClick={() => {
+            startedAtRef.current = performance.now();
+            setPhase('running');
+          }}
           className="rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
         >
           Start ({durationS}s)
@@ -195,6 +199,7 @@ function FloaterDesensitization({
   const [angle, setAngle] = useState(0);
   const [rating, setRating] = useState(5);
   const rafRef = useRef<number | null>(null);
+  const startedAtRef = useRef(performance.now());
 
   const contrastPct = Math.min(
     FLOATER_START_PCT,
@@ -204,6 +209,7 @@ function FloaterDesensitization({
   useEffect(() => {
     if (phase !== 'running') return;
     const start = performance.now();
+    startedAtRef.current = start;
     function tick(now: number) {
       setAngle(((now - start) / 1000) * 60);
       if (now - start >= FLOATER_DURATION_S * 1000) {
@@ -231,7 +237,7 @@ function FloaterDesensitization({
       exercise: 'EntopticDesensitization',
       paradigm: 'floater',
       weakEye,
-      durationSeconds: FLOATER_DURATION_S,
+      durationSeconds: Math.round((performance.now() - startedAtRef.current) / 1000),
       trials: 1,
       selfRating: { pre: 0, post: value },
       notes: `overlayContrastPct=${contrastPct}`,
@@ -324,6 +330,7 @@ function Photopsia({
   const [awaitingRating, setAwaitingRating] = useState(false);
   const [rating, setRating] = useState(5);
   const [done, setDone] = useState(false);
+  const startedAtRef = useRef(performance.now());
 
   useEffect(() => {
     if (!running || awaitingRating || done) return;
@@ -357,7 +364,7 @@ function Photopsia({
       exercise: 'EntopticDesensitization',
       paradigm: 'photopsia',
       weakEye,
-      durationSeconds: PHOTOPSIA_TRIALS * (ISI_MS / 1000),
+      durationSeconds: Math.round((performance.now() - startedAtRef.current) / 1000),
       trials: finalRatings.length,
       selfRating: { pre: 0, post: meanRating },
     });
@@ -386,7 +393,10 @@ function Photopsia({
         </p>
         <button
           type="button"
-          onClick={() => setRunning(true)}
+          onClick={() => {
+            startedAtRef.current = performance.now();
+            setRunning(true);
+          }}
           className="rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
         >
           Start

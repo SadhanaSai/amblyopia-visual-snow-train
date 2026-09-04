@@ -1,11 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
+import { useProfile } from '../profile/ProfileContext';
 import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { compositeAnaglyph, drawRDS, type RDSOptions } from '../utils/canvasUtils';
+import {
+  ENTROPY_STOP_BITS,
+  MAX_TRIALS,
+  MIN_TRIALS,
+  NO_STEREOPSIS_PROBABILITY,
+  initStereoPosterior,
+  marginalThresholdEntropy,
+  meanLapseRate,
+  meanLogThreshold,
+  probabilityNoStereopsis,
+  selectNextStereoStimulus,
+  updateStereoPosterior,
+  type StereoPosterior,
+} from '../utils/stereoQuest';
 
 const DISPARITY_LEVELS_ARCSEC = [800, 400, 200, 100, 60, 40, 20];
-const TOTAL_TRIALS = 20;
-const REVERSALS_AVERAGED = 4;
 const CANVAS_SIZE = 320;
 const TARGET_REGION_RADIUS = 80;
 const HAS_GLASSES_KEY = 'has_anaglyph_glasses';
@@ -25,8 +38,8 @@ const POSITIONS: { value: Position; label: string }[] = [
   { value: 'br', label: 'Bottom-right' },
 ];
 
-/** Remaps a grayscale RDS canvas into a single anaglyph channel (red or cyan). */
-function tintToChannel(source: HTMLCanvasElement, channel: 'red' | 'cyan'): HTMLCanvasElement {
+/** Remaps a grayscale RDS canvas into a single anaglyph channel (red, cyan, or green). */
+function tintToChannel(source: HTMLCanvasElement, channel: 'red' | 'cyan' | 'green'): HTMLCanvasElement {
   const out = document.createElement('canvas');
   out.width = source.width;
   out.height = source.height;
@@ -40,6 +53,10 @@ function tintToChannel(source: HTMLCanvasElement, channel: 'red' | 'cyan'): HTML
       dst.data[i] = gray;
       dst.data[i + 1] = 0;
       dst.data[i + 2] = 0;
+    } else if (channel === 'green') {
+      dst.data[i] = 0;
+      dst.data[i + 1] = gray;
+      dst.data[i + 2] = 0;
     } else {
       dst.data[i] = 0;
       dst.data[i + 1] = gray;
@@ -51,32 +68,35 @@ function tintToChannel(source: HTMLCanvasElement, channel: 'red' | 'cyan'): HTML
   return out;
 }
 
+function pickTarget(): Position {
+  return POSITIONS[Math.floor(Math.random() * POSITIONS.length)].value;
+}
+
 interface StereoTestProps {
   onComplete?: () => void;
 }
 
 export default function StereoTest({ onComplete }: StereoTestProps) {
+  const { profile } = useProfile();
   const { arcSecToPx } = useViewingCalibration();
-  const { logStereo } = useSessionLogger();
+  const { logStereo, logSession } = useSessionLogger();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const startedAtRef = useRef(performance.now());
 
   const [hasGlasses, setHasGlasses] = useState<boolean | null>(() => {
     const stored = localStorage.getItem(HAS_GLASSES_KEY);
     return stored === null ? null : stored === 'true';
   });
 
-  const [levelIndex, setLevelIndex] = useState(0);
-  const [target, setTarget] = useState<Position>('tl');
-  const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
-  const [lastDirection, setLastDirection] = useState<'harder' | 'easier' | null>(null);
-  const [reversals, setReversals] = useState<number[]>([]);
+  const [posterior, setPosterior] = useState<StereoPosterior>(() => initStereoPosterior());
+  const [currentArcsec, setCurrentArcsec] = useState<number>(() =>
+    selectNextStereoStimulus(initStereoPosterior(), DISPARITY_LEVELS_ARCSEC),
+  );
+  const [target, setTarget] = useState<Position>(pickTarget);
   const [trial, setTrial] = useState(0);
   const [done, setDone] = useState(false);
   const [thresholdArcsec, setThresholdArcsec] = useState<number | null>(null);
-
-  function pickTarget(): Position {
-    return POSITIONS[Math.floor(Math.random() * POSITIONS.length)].value;
-  }
+  const [noStereopsis, setNoStereopsis] = useState(false);
 
   useEffect(() => {
     if (hasGlasses !== true || done) return;
@@ -84,8 +104,7 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
 
-    const disparityArcsec = DISPARITY_LEVELS_ARCSEC[levelIndex];
-    const disparityPx = arcSecToPx(disparityArcsec);
+    const disparityPx = arcSecToPx(currentArcsec);
     const seed = trial + 1;
 
     const left = document.createElement('canvas');
@@ -110,54 +129,69 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
       seed,
     });
 
-    compositeAnaglyph(tintToChannel(left, 'red'), tintToChannel(right, 'cyan'), ctx);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasGlasses, done, levelIndex, target, trial, arcSecToPx]);
+    const strongChannel = profile.lensType === 'red-green' ? 'green' : 'cyan';
+    compositeAnaglyph(tintToChannel(left, 'red'), tintToChannel(right, strongChannel), ctx);
+  }, [hasGlasses, done, currentArcsec, target, trial, arcSecToPx, profile.lensType]);
 
   function respond(guess: Position) {
     const correct = guess === target;
-    let nextIndex = levelIndex;
-    let direction: 'harder' | 'easier' = lastDirection ?? 'harder';
-    let nextConsecutive = consecutiveCorrect;
-    let newReversals = reversals;
-
-    if (correct) {
-      nextConsecutive = consecutiveCorrect + 1;
-      if (nextConsecutive >= 2) {
-        direction = 'harder';
-        nextIndex = Math.min(DISPARITY_LEVELS_ARCSEC.length - 1, levelIndex + 1);
-        nextConsecutive = 0;
-      }
-    } else {
-      direction = 'easier';
-      nextIndex = Math.max(0, levelIndex - 1);
-      nextConsecutive = 0;
-    }
-
-    if (lastDirection && direction !== lastDirection && nextIndex !== levelIndex) {
-      newReversals = [...reversals, DISPARITY_LEVELS_ARCSEC[nextIndex]];
-    }
-
+    const nextPosterior = updateStereoPosterior(posterior, currentArcsec, correct);
     const nextTrial = trial + 1;
 
-    if (nextTrial >= TOTAL_TRIALS) {
-      const tail = newReversals.slice(-REVERSALS_AVERAGED);
-      const threshold =
-        tail.length > 0
-          ? tail.reduce((s, v) => s + v, 0) / tail.length
-          : DISPARITY_LEVELS_ARCSEC[nextIndex];
-      setThresholdArcsec(threshold);
-      logStereo({ date: new Date().toISOString(), thresholdArcsec: threshold, logThreshold: Math.log10(threshold) });
+    // Bayesian lapse-rate stopping rule (Wichmann & Hill, 2001 psychometric
+    // form — see stereoQuest.ts): stop once the posterior is either
+    // confidently converged on a real threshold (low entropy) or has
+    // concluded the participant can't reliably discriminate even the
+    // largest tested disparity (high probability mass at/beyond the floor)
+    // — whichever comes first, after a minimum number of trials, with a
+    // fixed max as a safety net regardless of convergence.
+    const entropy = marginalThresholdEntropy(nextPosterior);
+    const pNoStereopsis = probabilityNoStereopsis(nextPosterior, DISPARITY_LEVELS_ARCSEC[0]);
+    const converged = entropy <= ENTROPY_STOP_BITS || pNoStereopsis >= NO_STEREOPSIS_PROBABILITY;
+    const shouldStop = nextTrial >= MAX_TRIALS || (nextTrial >= MIN_TRIALS && converged);
+
+    if (shouldStop) {
+      const isNoStereopsis = pNoStereopsis >= NO_STEREOPSIS_PROBABILITY;
+      const smallestTested = DISPARITY_LEVELS_ARCSEC[DISPARITY_LEVELS_ARCSEC.length - 1];
+      const largestTested = DISPARITY_LEVELS_ARCSEC[0];
+      const rawMean = Math.pow(10, meanLogThreshold(nextPosterior));
+      const finalArcsec = isNoStereopsis
+        ? largestTested
+        : Math.min(largestTested, Math.max(smallestTested, rawMean));
+      const lapseRate = meanLapseRate(nextPosterior);
+
+      logStereo({
+        date: new Date().toISOString(),
+        thresholdArcsec: finalArcsec,
+        logThreshold: Math.log10(finalArcsec),
+        noMeasurableStereopsis: isNoStereopsis,
+        lapseRate,
+      });
+      logSession({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        module: 'assessment',
+        exercise: 'StereoTest',
+        weakEye: profile.weakEye,
+        durationSeconds: Math.round((performance.now() - startedAtRef.current) / 1000),
+        trials: nextTrial,
+        staircaseThreshold: finalArcsec,
+        thresholdUnit: 'arcsec',
+        notes: isNoStereopsis ? 'noMeasurableStereopsis=true' : undefined,
+      });
+      setPosterior(nextPosterior);
+      setThresholdArcsec(finalArcsec);
+      setNoStereopsis(isNoStereopsis);
+      setTrial(nextTrial);
       setDone(true);
-      onComplete?.();
+      // onComplete is deferred to the "Done" button on the complete
+      // screen, not called here — see VATest.tsx for why.
       return;
     }
 
-    setLevelIndex(nextIndex);
-    setConsecutiveCorrect(nextConsecutive);
-    setLastDirection(direction);
-    setReversals(newReversals);
+    setPosterior(nextPosterior);
     setTrial(nextTrial);
+    setCurrentArcsec(selectNextStereoStimulus(nextPosterior, DISPARITY_LEVELS_ARCSEC));
     setTarget(pickTarget());
   }
 
@@ -166,13 +200,15 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
       <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
         <h2 className="text-lg font-semibold">Stereoacuity Test</h2>
         <p className="text-sm text-gray-600">
-          This test requires red/cyan anaglyph glasses to view the depth stimulus.
+          This test requires red/cyan or red/green anaglyph glasses to view the depth stimulus.
+          Set which kind you have under Settings → Lens type.
         </p>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => {
               localStorage.setItem(HAS_GLASSES_KEY, 'true');
+              startedAtRef.current = performance.now();
               setHasGlasses(true);
             }}
             className="flex-1 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
@@ -199,8 +235,8 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
       <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
         <h2 className="text-lg font-semibold">Stereoacuity Test — locked</h2>
         <p className="text-sm text-gray-600">
-          Red/cyan anaglyph glasses are required for this test. Once you have a pair, come back
-          and re-run it.
+          Red/cyan or red/green anaglyph glasses are required for this test. Once you have a
+          pair, come back and re-run it.
         </p>
         <button
           type="button"
@@ -220,9 +256,23 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
         <h2 className="text-lg font-semibold">Test complete</h2>
-        <p className="text-sm text-gray-700">
-          Threshold: <strong>{thresholdArcsec.toFixed(0)} arc-sec</strong>
-        </p>
+        {noStereopsis ? (
+          <>
+            <p className="text-sm text-gray-700">
+              <strong>No measurable stereopsis detected.</strong>
+            </p>
+            <p className="text-sm text-gray-600">
+              Your responses stayed near chance even at {thresholdArcsec} arc-sec, the largest
+              (easiest) disparity this test presents — so a numeric threshold wouldn't be a real
+              measurement. This is a real, fairly common finding in strabismic and some other
+              forms of amblyopia, not a test failure.
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-gray-700">
+            Threshold: <strong>{thresholdArcsec.toFixed(0)} arc-sec</strong>
+          </p>
+        )}
         <ul className="text-xs text-gray-500">
           {CLINICAL_LINES.map((l) => (
             <li key={l.arcsec}>
@@ -230,6 +280,13 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
             </li>
           ))}
         </ul>
+        <button
+          type="button"
+          onClick={() => onComplete?.()}
+          className="mt-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
+        >
+          Done
+        </button>
       </div>
     );
   }
@@ -238,7 +295,7 @@ export default function StereoTest({ onComplete }: StereoTestProps) {
     <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
       <h2 className="text-lg font-semibold">Stereoacuity Test</h2>
       <div className="text-xs text-gray-400">
-        Trial {trial + 1} / {TOTAL_TRIALS}
+        Trial {trial + 1} (stops automatically between {MIN_TRIALS} and {MAX_TRIALS})
       </div>
       <canvas
         ref={canvasRef}
