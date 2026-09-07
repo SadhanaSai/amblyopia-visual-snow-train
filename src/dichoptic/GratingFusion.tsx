@@ -20,7 +20,12 @@ type TemporalCondition = (typeof TEMPORAL_CONDITIONS)[number]['value'];
 const MAX_TRIALS = 40;
 const STIMULUS_MS = 2000;
 const ISI_MS = 500;
-const RESPONSE_MS = 500;
+// 500ms was too tight for a perceive-then-decide-then-press-key response —
+// most trials auto-timed-out to "not fused" regardless of what was actually
+// seen, making the live/final fusion-rate readout look permanently stuck
+// near 0%. 2000ms gives real reaction time room while still capping how
+// long a trial can wait for input.
+const RESPONSE_MS = 2000;
 
 type Phase = 'setup' | 'stimulus' | 'isi' | 'response' | 'done';
 
