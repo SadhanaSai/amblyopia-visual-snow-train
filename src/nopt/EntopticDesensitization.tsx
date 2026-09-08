@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProfile } from '../profile/ProfileContext';
 import { useSessionLogger } from '../hooks/useSessionLogger';
+import { SUBMODE_INFO } from '../data/exerciseInfo';
+import ExerciseIntro from '../components/ExerciseIntro';
 
 type SubMode = 'blueField' | 'floater' | 'photopsia';
 
@@ -20,6 +22,22 @@ export default function EntopticDesensitization({ onComplete }: EntopticDesensit
   const { profile } = useProfile();
   const { logSession } = useSessionLogger();
   const [subMode, setSubMode] = useState<SubMode | null>(null);
+  const [subModeIntroSeen, setSubModeIntroSeen] = useState(false);
+
+  function selectSubMode(m: SubMode) {
+    setSubMode(m);
+    setSubModeIntroSeen(false);
+  }
+
+  if (subMode && !subModeIntroSeen) {
+    return (
+      <ExerciseIntro
+        info={SUBMODE_INFO['entoptic-desensitization'][subMode]}
+        onStart={() => setSubModeIntroSeen(true)}
+        onBack={() => setSubMode(null)}
+      />
+    );
+  }
 
   if (!subMode) {
     return (
@@ -30,7 +48,7 @@ export default function EntopticDesensitization({ onComplete }: EntopticDesensit
             <button
               key={m}
               type="button"
-              onClick={() => setSubMode(m)}
+              onClick={() => selectSubMode(m)}
               disabled={m === 'photopsia' && profile.photosensitiveEpilepsy}
               className="rounded-lg border border-gray-200 p-3 text-left text-sm font-medium disabled:opacity-40"
             >

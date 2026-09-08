@@ -180,3 +180,115 @@ export const EXERCISE_INFO: Record<string, ExerciseInfo> = {
     duration: '~5 minutes',
   },
 };
+
+/**
+ * Same purpose as EXERCISE_INFO, but for the individual drills inside a
+ * multi-sub-mode NOPT trainer (Saccadic Training, Vergence + Accommodation
+ * Training, Entoptic Desensitization) — each drill has its own mechanism and
+ * response pattern, so picking one from the parent's list isn't enough
+ * context to jump straight in. Shown once per pick, between the sub-mode
+ * list and the drill itself. Keyed by [exercise key][sub-mode key].
+ */
+export const SUBMODE_INFO: Record<string, Record<string, ExerciseInfo>> = {
+  'saccadic-training': {
+    targeting: {
+      title: 'Saccadic Targeting',
+      summary:
+        'Trains fast, accurate eye jumps (saccades) between two points — the fixate-and-jump movement often slowed or inaccurate in visual snow syndrome.',
+      steps: [
+        'Fixate the black dot.',
+        'The instant it jumps to the other side, press spacebar as fast as you can.',
+        'Eccentricity increases automatically once your reaction times are consistently fast.',
+        'Runs for your chosen session length (12 or 24 minutes).',
+      ],
+    },
+    pursuit: {
+      title: 'Smooth Pursuit',
+      summary:
+        'Trains smoothly tracking a continuously moving target with your eyes alone — no head movement, no key presses.',
+      steps: [
+        'Follow the target with your eyes as it moves smoothly back and forth.',
+        "Don't turn your head — eyes only.",
+        'After each 60-second run, rate how smooth your tracking felt.',
+        'Repeats until your chosen session length is reached.',
+      ],
+    },
+    antisaccade: {
+      title: 'Anti-saccade (advanced)',
+      summary:
+        'Trains inhibitory control by deliberately looking away from a flashed target instead of toward it — harder than targeting, and a step up once that feels easy.',
+      steps: [
+        'A target will flash briefly on one side.',
+        'Press the arrow key for the opposite side as fast as you can — resist looking toward the flash.',
+        'Mistakes are expected while you build this up; both speed and accuracy are tracked.',
+        'Runs for your chosen session length.',
+      ],
+    },
+  },
+  'vergence-training': {
+    convergence: {
+      title: 'Convergence Push-up',
+      summary:
+        "Trains your eyes' ability to converge (turn inward together) to keep two images fused as they move closer, addressing the convergence insufficiency common in visual snow syndrome.",
+      steps: [
+        'Look at both circles.',
+        'If they fuse into one image (or you briefly see three), tap "Held" — this brings them closer together.',
+        'Tap "Broke" the moment fusion breaks apart.',
+        'Your breakpoint is logged each time you tap "Broke".',
+      ],
+    },
+    accommodativeRock: {
+      title: 'Accommodative Rock',
+      summary:
+        'Trains how quickly your eyes can refocus (accommodate) between near and far distances.',
+      steps: [
+        'Text alternates between small (simulating near) and large (simulating far).',
+        'Press spacebar the moment it looks sharp — this switches to the other size.',
+        'Keep alternating for the full 3-minute run.',
+      ],
+    },
+    noiseStability: {
+      title: 'Binocular Stability Under Noise',
+      summary:
+        'Trains holding steady central fixation with both eyes as background visual noise gradually increases — a more demanding version of fixation stability.',
+      steps: [
+        'Hold your gaze on the central cross the whole time.',
+        'Background noise will gradually get denser — no response needed.',
+        'Runs for 45 seconds.',
+      ],
+    },
+  },
+  'entoptic-desensitization': {
+    blueField: {
+      title: 'Blue-field Phosphene Habituation',
+      summary:
+        'Uses a plain blue field to bring on the normally-present "blue field entoptic phenomenon" (tiny moving dots from white blood cells in your retinal blood vessels) under controlled conditions, so repeated exposure makes it feel less intrusive.',
+      steps: [
+        'Rate how intrusive floating specks feel right now.',
+        'Watch the plain blue screen for the timed duration.',
+        'Rate again immediately afterward.',
+        'Each completed session gradually extends the next one’s duration.',
+      ],
+    },
+    floater: {
+      title: 'Floater Desensitization',
+      summary:
+        'Graded exposure to a moving shape behind a translucent overlay, aimed at reducing how intrusive true vitreous floaters feel over repeated sessions.',
+      steps: [
+        'Watch the moving shape behind the overlay for 2 minutes.',
+        'Afterward, rate how intrusive the floaters felt.',
+        'Lower ratings gradually reduce the overlay’s contrast in future sessions, making it a bit harder to notice.',
+      ],
+    },
+    photopsia: {
+      title: 'Photopsia Desensitization',
+      summary:
+        'Graded exposure to brief, low-intensity light pulses, aimed at reducing how intrusive photopsias (light flashes) feel over time. Locked if you flagged photosensitive epilepsy at onboarding.',
+      steps: [
+        'A brief white flash will occur against a dark background, repeated 10 times.',
+        'Rate how intrusive each flash felt right after it happens.',
+        'Stop immediately if you feel unwell — this exercise is optional.',
+      ],
+    },
+  },
+};

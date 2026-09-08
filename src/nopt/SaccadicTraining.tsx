@@ -3,6 +3,8 @@ import { useProfile } from '../profile/ProfileContext';
 import { useViewingCalibration } from '../hooks/useViewingCalibration';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useResponsiveWidth } from '../hooks/useResponsiveWidth';
+import { SUBMODE_INFO } from '../data/exerciseInfo';
+import ExerciseIntro from '../components/ExerciseIntro';
 
 type SubMode = 'targeting' | 'pursuit' | 'antisaccade';
 
@@ -43,7 +45,23 @@ export default function SaccadicTraining({ onComplete }: SaccadicTrainingProps) 
   const { logSession } = useSessionLogger();
 
   const [subMode, setSubMode] = useState<SubMode | null>(null);
+  const [subModeIntroSeen, setSubModeIntroSeen] = useState(false);
   const [durationMin, setDurationMin] = useState<(typeof DURATIONS_MIN)[number]>(12);
+
+  function selectSubMode(m: SubMode) {
+    setSubMode(m);
+    setSubModeIntroSeen(false);
+  }
+
+  if (subMode && !subModeIntroSeen) {
+    return (
+      <ExerciseIntro
+        info={SUBMODE_INFO['saccadic-training'][subMode]}
+        onStart={() => setSubModeIntroSeen(true)}
+        onBack={() => setSubMode(null)}
+      />
+    );
+  }
 
   if (!subMode) {
     return (
@@ -54,7 +72,7 @@ export default function SaccadicTraining({ onComplete }: SaccadicTrainingProps) 
             <button
               key={m}
               type="button"
-              onClick={() => setSubMode(m)}
+              onClick={() => selectSubMode(m)}
               className="rounded-lg border border-gray-200 p-3 text-left text-sm font-medium"
             >
               {SUBMODE_LABELS[m]}
